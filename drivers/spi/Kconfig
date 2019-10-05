@@ -743,6 +743,12 @@ config SPI_XTENSA_XTFPGA
 	  16 bit words in SPI mode 0, automatically asserting CS on transfer
 	  start and deasserting on end.
 
+config SPI_ZSIPOS
+	tristate "ZSIPOS SPI controller"
+	depends on SPI_MASTER
+	help
+	  Enables ZSIPOS SPI controller driver for ZSIPOS SoC.
+
 config SPI_ZYNQMP_GQSPI
 	tristate "Xilinx ZynqMP GQSPI controller"
 	depends on SPI_MASTER && HAS_DMA
