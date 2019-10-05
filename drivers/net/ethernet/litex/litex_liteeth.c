@@ -388,9 +388,9 @@ static int liteeth_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-	netdev_info(netdev, "reset hardware\n");
 	liteeth_reset_hw(priv);
-	netdev_info(netdev, "irq %d, mapped at %px\n", netdev->irq, priv->base);
+
+	netdev_info(netdev, "loaded\n");
 
 	return 0;
 err:
