@@ -500,8 +500,6 @@ static struct of_device_id zsipos_spi_match[] = {
 };
 MODULE_DEVICE_TABLE(of, zsipos_spi_match);
 
-MODULE_ALIAS("platform:" DRIVER_NAME);
-
 static struct platform_driver zsipos_spi_driver = {
 	.probe = zsipos_spi_probe,
 	.remove = zsipos_spi_remove,
@@ -513,6 +511,6 @@ static struct platform_driver zsipos_spi_driver = {
 };
 module_platform_driver(zsipos_spi_driver);
 
-MODULE_DESCRIPTION("OpenCores BIG SPI driver");
+MODULE_DESCRIPTION("zsipos spi driver");
 MODULE_AUTHOR("Stefan Adams");
 MODULE_LICENSE("GPL");
