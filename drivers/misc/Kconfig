@@ -512,6 +512,15 @@ config PCI_ENDPOINT_TEST
 config MISC_RTSX
 	tristate
 	default MISC_RTSX_PCI || MISC_RTSX_USB
+	
+config ZSIPOS_AES
+	tristate "zsipos aes driver"
+	default n
+	
+config ZSIPOS_SHA1
+	tristate "zsipos sha1 driver"
+	default n
+	
 
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"

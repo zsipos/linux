@@ -13,15 +13,14 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+#include <linux/delay.h>
+#include <linux/err.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
-#include <linux/delay.h>
+#include <linux/io.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/err.h>
-#include <linux/io.h>
 #include <linux/spi/spi.h>
-#include <asm/unaligned.h>
 
 #define DRIVER_NAME					"zsipos_spi"
 #define FIFOSIZE 					256
@@ -178,10 +177,12 @@ static void zsipos_spi_set_cs(struct zsipos_spi *zsipos_spi, int mask)
 	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SSR, mask);
 }
 
+/*
 static int check_empty(struct zsipos_spi *zsipos_spi)
 {
 	return (*zsipos_spi->reg_spsr & ZSIPOS_SPI_SPSR_RFEMPTY);
 }
+*/
 
 static irqreturn_t zsipos_spi_irq(int irq, void *dev_id)
 {
@@ -492,7 +493,7 @@ static int zsipos_spi_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static struct of_device_id zsipos_spi_match[] = {
+static const struct of_device_id zsipos_spi_match[] = {
 	{
 		.compatible = "zsipos,spi",
 	},
