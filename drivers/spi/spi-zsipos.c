@@ -25,7 +25,7 @@
 
 #define DRIVER_NAME					"zsipos_spi"
 #define FIFOSIZE 					256
-#define MINFIFO						1
+#define MINIRQ						4
 
 #define ZSIPOS_SPI_NUM_CHIPSELECTS	8
 #define ZSIPOS_SPI_FILL_BYTE		0x00
@@ -177,11 +177,6 @@ static void zsipos_spi_set_cs(struct zsipos_spi *zsipos_spi, int mask)
 	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SSR, mask);
 }
 
-static int check_empty(struct zsipos_spi *zsipos_spi)
-{
-	return (readl(zsipos_spi->reg_spsr) & ZSIPOS_SPI_SPSR_RFEMPTY);
-}
-
 static irqreturn_t zsipos_spi_irq(int irq, void *dev_id)
 {
 	struct zsipos_spi *zsipos_spi = dev_id;
@@ -201,9 +196,8 @@ static void zsipos_spi_xfer_chunk(struct zsipos_spi *zsipos_spi, const u8 *txdat
 	unsigned int i;
 	u8 dummy;
 
-	if (len >= MINFIFO) {
+	if (len >= MINIRQ) {
 		zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_ICNT, len-1);
-		zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SPSR, ZSIPOS_SPI_SPSR_SPIF);
 		reinit_completion(&zsipos_spi->transferdone);
 		if (txdata)
 			for (i = len; i; i--)
@@ -241,7 +235,7 @@ static void zsipos_spi_xfer_chunk(struct zsipos_spi *zsipos_spi, const u8 *txdat
 			}
 	}
 
-	if (!check_empty(zsipos_spi))
+	if (!(readl(zsipos_spi->reg_spsr) & ZSIPOS_SPI_SPSR_RFEMPTY))
 		printk("fifo not empty: len=%d, tx=%d, rx=%d\n", len, txdata != 0, rxdata != 0);
 }
 
