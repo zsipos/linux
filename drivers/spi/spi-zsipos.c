@@ -25,7 +25,7 @@
 
 #define DRIVER_NAME					"zsipos_spi"
 #define FIFOSIZE 					256
-#define MINIRQ						4
+#define MINIRQ						2
 
 #define ZSIPOS_SPI_NUM_CHIPSELECTS	8
 #define ZSIPOS_SPI_FILL_BYTE		0x00
@@ -39,7 +39,7 @@
 #define ZSIPOS_SPI_REG_ICNT			(0x5*BUSALIGN)
 
 #define ZSIPOS_SPI_SPCR_SPIE		(1 << 7)
-#define ZSIPOS_SPI_SPCR_SPE			(1 << 6)
+#define ZSIPOS_SPI_SPCR_SPEN		(1 << 6)
 #define ZSIPOS_SPI_SPCR_MSTR		(1 << 4)
 #define ZSIPOS_SPI_SPCR_CPOL		(1 << 3)
 #define ZSIPOS_SPI_SPCR_CPHA		(1 << 2)
@@ -101,8 +101,6 @@ static void zsipos_spi_set_baudrate_bits(u8* spcr, u8* sper, unsigned int speed)
 		}
 	}
 
-	//printk("speed=%d(%d), i=%d(", speed, cpuinfo->clock_frequency >> (1+i), i);
-
 	/* The register values for some cases are weird... fix here */
 	switch (i) {
 	case 3:
@@ -115,8 +113,6 @@ static void zsipos_spi_set_baudrate_bits(u8* spcr, u8* sper, unsigned int speed)
 		i = 4;
 		break;
 	}
-
-	//printk("%d)\n", i);
 
 	*spcr = (*spcr & ~ZSIPOS_SPI_SPCR_SPR ) | (i & ZSIPOS_SPI_SPCR_SPR);
 	*sper = (*spcr & ~ZSIPOS_SPI_SPER_ESPR) | (i >> 2);
@@ -182,10 +178,10 @@ static irqreturn_t zsipos_spi_irq(int irq, void *dev_id)
 	struct zsipos_spi *zsipos_spi = dev_id;
 	u8 stat = readl(zsipos_spi->reg_spsr);
 
-	writel(stat, zsipos_spi->reg_spsr);
-
 	if (stat & ZSIPOS_SPI_SPSR_SPIF)
 		complete(&zsipos_spi->transferdone);
+
+	writel(stat, zsipos_spi->reg_spsr);
 
 	return IRQ_HANDLED;
 }
@@ -193,6 +189,7 @@ static irqreturn_t zsipos_spi_irq(int irq, void *dev_id)
 static void zsipos_spi_xfer_chunk(struct zsipos_spi *zsipos_spi, const u8 *txdata, u8 *rxdata, unsigned len)
 {
 	u32 __iomem *datareg = zsipos_spi->reg_spdr;
+	u32 __iomem *statreg = zsipos_spi->reg_spsr;
 	unsigned int i;
 	u8 dummy;
 
@@ -211,10 +208,9 @@ static void zsipos_spi_xfer_chunk(struct zsipos_spi *zsipos_spi, const u8 *txdat
 				*rxdata++ = readl(datareg);
 		else
 			for (i = len; i; i--)
-				dummy = readl(datareg);
+				readl(datareg);
 	} else {
-		u32 __iomem *statreg = zsipos_spi->reg_spsr;
-
+		zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_ICNT, FIFOSIZE-1);
 		if (txdata)
 			for (i = len; i; i--)
 				writel(*txdata++, datareg);
@@ -231,11 +227,11 @@ static void zsipos_spi_xfer_chunk(struct zsipos_spi *zsipos_spi, const u8 *txdat
 			for (i = len; i; i--) {
 				while (readl(statreg) & ZSIPOS_SPI_SPSR_RFEMPTY)
 					cond_resched();
-				dummy = readl(datareg);
+				readl(datareg);
 			}
 	}
 
-	if (!(readl(zsipos_spi->reg_spsr) & ZSIPOS_SPI_SPSR_RFEMPTY))
+	if (!(readl(statreg) & ZSIPOS_SPI_SPSR_RFEMPTY))
 		printk("fifo not empty: len=%d, tx=%d, rx=%d\n", len, txdata != 0, rxdata != 0);
 }
 
@@ -333,7 +329,7 @@ static int zsipos_spi_transfer_one_message(struct spi_master *master, struct spi
 
 	}
 
-	msg_done:
+msg_done:
 
 	if (cs_active)
 		zsipos_spi_set_cs(zsipos_spi, 0);
@@ -354,7 +350,7 @@ static int zsipos_spi_reset(struct zsipos_spi *zsipos_spi)
 	/* Disable controller */
 	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SPCR, ZSIPOS_SPI_SPCR_MSTR);
 	/* Enable controller */
-	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SPCR, ZSIPOS_SPI_SPCR_SPE | ZSIPOS_SPI_SPCR_SPIE | ZSIPOS_SPI_SPCR_MSTR);
+	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SPCR, ZSIPOS_SPI_SPCR_MSTR | ZSIPOS_SPI_SPCR_SPEN | ZSIPOS_SPI_SPCR_SPIE);
 	/* clear interrupt flag */
 	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SPSR, ZSIPOS_SPI_SPSR_SPIF);
 
@@ -467,7 +463,7 @@ static int zsipos_spi_probe(struct platform_device *pdev)
 
 	return status;
 
-	out:
+out:
 	spi_master_put(master);
 	return status;
 }
