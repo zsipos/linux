@@ -36,9 +36,9 @@ static dev_t          g_devt;
 static u32 			  g_mem_base;
 static u32			  g_mem_size;
 static volatile u32  *g_base_addr;
+static bool 		  g_open = false;
 
 static DEFINE_MUTEX(g_open_lock);
-static bool g_open = false;						/* driver is open */
 
 static int zsipos_sha1_mmap(struct file *filp, struct vm_area_struct *vma)
 {
@@ -171,12 +171,12 @@ static const struct of_device_id zsipos_sha1_dt_match[] = {
 MODULE_DEVICE_TABLE(of, zsipos_sha1_dt_match);
 
 static struct platform_driver zsipos_sha1_driver = {
-		.probe  = zsipos_sha1_probe,
-		.remove = zsipos_sha1_remove,
-		.driver = {
-				.name = DRVNAME,
-				.of_match_table = zsipos_sha1_dt_match,
-		},
+	.probe  = zsipos_sha1_probe,
+	.remove = zsipos_sha1_remove,
+	.driver = {
+		.name = DRVNAME,
+		.of_match_table = zsipos_sha1_dt_match,
+	},
 };
 module_platform_driver(zsipos_sha1_driver);
 
