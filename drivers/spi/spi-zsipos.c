@@ -13,6 +13,7 @@
  * it under the terms of the GNU General Public License version 2 as
  * published by the Free Software Foundation.
  */
+
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/init.h>
@@ -56,9 +57,8 @@
 struct zsipos_spi {
 	struct spi_master	*master;
 	void	__iomem		*base;
-	u32		__iomem		*reg_spsr;
-	u32		__iomem		*reg_spdr;
-	u32		__iomem		*reg_spcr;
+	void	__iomem		*reg_spsr;
+	void	__iomem		*reg_spdr;
 	int                 irq;
 	struct completion   transferdone;
 	unsigned int		max_speed;
@@ -69,11 +69,11 @@ struct zsipos_spi {
 };
 
 static u8 zsipos_spi_read(struct zsipos_spi* zsipos_spi, unsigned int reg) {
-	return ioread32(zsipos_spi->base + reg);
+	return readl(zsipos_spi->base + reg);
 }
 
 static void zsipos_spi_write(struct zsipos_spi* zsipos_spi, unsigned int reg, u8 value) {
-	iowrite32(value, zsipos_spi->base + reg);
+	writel(value, zsipos_spi->base + reg);
 }
 
 static int zsipos_spi_set_transfer_size(struct zsipos_spi *zsipos_spi, unsigned int size)
@@ -177,22 +177,20 @@ static void zsipos_spi_set_cs(struct zsipos_spi *zsipos_spi, int mask)
 	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SSR, mask);
 }
 
-/*
 static int check_empty(struct zsipos_spi *zsipos_spi)
 {
-	return (*zsipos_spi->reg_spsr & ZSIPOS_SPI_SPSR_RFEMPTY);
+	return (readl(zsipos_spi->reg_spsr) & ZSIPOS_SPI_SPSR_RFEMPTY);
 }
-*/
 
 static irqreturn_t zsipos_spi_irq(int irq, void *dev_id)
 {
 	struct zsipos_spi *zsipos_spi = dev_id;
-	u8 stat = *zsipos_spi->reg_spsr;
+	u8 stat = readl(zsipos_spi->reg_spsr);
 
-	if (stat & ZSIPOS_SPI_SPSR_SPIF) {
+	writel(stat, zsipos_spi->reg_spsr);
+
+	if (stat & ZSIPOS_SPI_SPSR_SPIF)
 		complete(&zsipos_spi->transferdone);
-	}
-	*zsipos_spi->reg_spsr = stat;
 
 	return IRQ_HANDLED;
 }
@@ -201,6 +199,7 @@ static void zsipos_spi_xfer_chunk(struct zsipos_spi *zsipos_spi, const u8 *txdat
 {
 	u32 __iomem *datareg = zsipos_spi->reg_spdr;
 	unsigned int i;
+	u8 dummy;
 
 	if (len >= MINFIFO) {
 		zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_ICNT, len-1);
@@ -208,45 +207,48 @@ static void zsipos_spi_xfer_chunk(struct zsipos_spi *zsipos_spi, const u8 *txdat
 		reinit_completion(&zsipos_spi->transferdone);
 		if (txdata)
 			for (i = len; i; i--)
-				*datareg = *txdata++;
+				writel(*txdata++, datareg);
 		else
 			for (i = len; i; i--)
-				*datareg = ZSIPOS_SPI_FILL_BYTE;
+				writel(ZSIPOS_SPI_FILL_BYTE, datareg);
 		wait_for_completion(&zsipos_spi->transferdone);
 		if (rxdata)
 			for (i = len; i; i--)
-				*rxdata++ = *datareg;
+				*rxdata++ = readl(datareg);
 		else
 			for (i = len; i; i--)
-				ioread32(datareg);
+				dummy = readl(datareg);
 	} else {
 		u32 __iomem *statreg = zsipos_spi->reg_spsr;
+
 		if (txdata)
 			for (i = len; i; i--)
-				*datareg = *txdata++;
+				writel(*txdata++, datareg);
 		else
 			for (i = len; i; i--)
-				*datareg = ZSIPOS_SPI_FILL_BYTE;
+				writel(ZSIPOS_SPI_FILL_BYTE, datareg);
 		if (rxdata)
 			for (i = len; i; i--) {
-				while (*statreg & ZSIPOS_SPI_SPSR_RFEMPTY)
+				while (readl(statreg) & ZSIPOS_SPI_SPSR_RFEMPTY)
 					cond_resched();
-				*rxdata++ = *datareg;
+				*rxdata++ = readl(datareg);
 			}
 		else
 			for (i = len; i; i--) {
-				while (*statreg & ZSIPOS_SPI_SPSR_RFEMPTY)
+				while (readl(statreg) & ZSIPOS_SPI_SPSR_RFEMPTY)
 					cond_resched();
-				ioread32(datareg);
+				dummy = readl(datareg);
 			}
 	}
+
+	if (!check_empty(zsipos_spi))
+		printk("fifo not empty: len=%d, tx=%d, rx=%d\n", len, txdata != 0, rxdata != 0);
 }
 
 static void zsipos_spi_xfer_fifo(struct zsipos_spi *zsipos_spi, const u8 *txdata, u8 *rxdata, unsigned len)
 {
 	unsigned int i, r = len % FIFOSIZE;
 
-	//printk("xfer enter: %d, %d, %d, %d\n", len, txdata == 0, rxdata == 0, check_empty(zsipos_spi));
 	for (i = 0; i < len / FIFOSIZE; i++) {
 		zsipos_spi_xfer_chunk(zsipos_spi, txdata, rxdata, FIFOSIZE);
 		if (txdata) txdata += FIFOSIZE;
@@ -254,7 +256,6 @@ static void zsipos_spi_xfer_fifo(struct zsipos_spi *zsipos_spi, const u8 *txdata
 	}
 	if (r)
 		zsipos_spi_xfer_chunk(zsipos_spi, txdata, rxdata, r);
-	//printk("xfer leave: %d, %d, %d, %d\n", len, txdata == 0, rxdata == 0, check_empty(zsipos_spi));
 }
 
 static unsigned int zsipos_spi_write_read(struct zsipos_spi *zsipos_spi, struct spi_transfer *xfer)
@@ -452,9 +453,8 @@ static int zsipos_spi_probe(struct platform_device *pdev)
 	}
 	spi->base = devm_ioremap_nocache(&pdev->dev, r->start,
 			resource_size(r));
-	spi->reg_spsr = (u32*)(spi->base + ZSIPOS_SPI_REG_SPSR);
-	spi->reg_spdr = (u32*)(spi->base + ZSIPOS_SPI_REG_SPDR);
-	spi->reg_spcr = (u32*)(spi->base + ZSIPOS_SPI_REG_SPCR);
+	spi->reg_spsr = spi->base + ZSIPOS_SPI_REG_SPSR;
+	spi->reg_spdr = spi->base + ZSIPOS_SPI_REG_SPDR;
 
 	spi->irq = platform_get_irq(pdev, 0);
 
