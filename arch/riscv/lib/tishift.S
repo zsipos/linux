@@ -10,6 +10,7 @@
  *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *   GNU General Public License for more details.
  */
+#ifdef CONFIG_ARCH_RV64I
   .globl __lshrti3
 __lshrti3:
   beqz  a2, .L1
@@ -40,3 +41,4 @@ __lshrti3:
   ld    a1,8(sp)
   addi  sp,sp,16
   ret
+#endif

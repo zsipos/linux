@@ -19,30 +19,36 @@
 #define DRV_NAME	"liteeth"
 #define DRV_VERSION	"0.1"
 
-#define LITEETH_WRITER_SLOT		0x00*2
-#define LITEETH_WRITER_LENGTH		0x04*2
-#define LITEETH_WRITER_ERRORS		0x14*2
-#define LITEETH_WRITER_EV_STATUS	0x24*2
-#define LITEETH_WRITER_EV_PENDING	0x28*2
-#define LITEETH_WRITER_EV_ENABLE	0x2c*2
-#define LITEETH_READER_START		0x30*2
-#define LITEETH_READER_READY		0x34*2
-#define LITEETH_READER_LEVEL		0x38*2
-#define LITEETH_READER_SLOT		0x3c*2
-#define LITEETH_READER_LENGTH		0x40*2
-#define LITEETH_READER_EV_STATUS	0x48*2
-#define LITEETH_READER_EV_PENDING	0x4c*2
-#define LITEETH_READER_EV_ENABLE	0x50*2
-#define LITEETH_PREAMBLE_CRC		0x54*2
-#define LITEETH_PREAMBLE_ERRORS		0x58*2
-#define LITEETH_CRC_ERRORS		0x68*2
+#ifdef _LP64
+#define _ALIGN 2
+#else
+#define _ALIGN 1
+#endif
 
-#define LITEETH_PHY_CRG_RESET		0x00*2
-#define LITEETH_MDIO_W			0x04*2
-#define LITEETH_MDIO_R			0x08*2
+#define LITEETH_WRITER_SLOT			0x00*_ALIGN
+#define LITEETH_WRITER_LENGTH		0x04*_ALIGN
+#define LITEETH_WRITER_ERRORS		0x14*_ALIGN
+#define LITEETH_WRITER_EV_STATUS	0x24*_ALIGN
+#define LITEETH_WRITER_EV_PENDING	0x28*_ALIGN
+#define LITEETH_WRITER_EV_ENABLE	0x2c*_ALIGN
+#define LITEETH_READER_START		0x30*_ALIGN
+#define LITEETH_READER_READY		0x34*_ALIGN
+#define LITEETH_READER_LEVEL		0x38*_ALIGN
+#define LITEETH_READER_SLOT			0x3c*_ALIGN
+#define LITEETH_READER_LENGTH		0x40*_ALIGN
+#define LITEETH_READER_EV_STATUS	0x48*_ALIGN
+#define LITEETH_READER_EV_PENDING	0x4c*_ALIGN
+#define LITEETH_READER_EV_ENABLE	0x50*_ALIGN
+#define LITEETH_PREAMBLE_CRC		0x54*_ALIGN
+#define LITEETH_PREAMBLE_ERRORS		0x58*_ALIGN
+#define LITEETH_CRC_ERRORS			0x68*_ALIGN
 
-#define LITEETH_BUFFER_SIZE		0x800
-#define MAX_PKT_SIZE			LITEETH_BUFFER_SIZE
+#define LITEETH_PHY_CRG_RESET		0x00*_ALIGN
+#define LITEETH_MDIO_W				0x04*_ALIGN
+#define LITEETH_MDIO_R				0x08*_ALIGN
+
+#define LITEETH_BUFFER_SIZE			0x800
+#define MAX_PKT_SIZE				LITEETH_BUFFER_SIZE
 
 struct liteeth {
 	void __iomem *base;
@@ -72,28 +78,29 @@ struct liteeth {
  * Each 32 bit memory location contains a single byte of data, stored
  * little endian
  */
+
 static inline void outreg8(u8 val, void __iomem *addr)
 {
-	iowrite32(val, addr);
+	writel(val, addr);
 }
 
 static inline void outreg16(u16 val, void __iomem *addr)
 {
 	outreg8(val >> 8, addr);
-	outreg8(val, addr + 4*2);
+	outreg8(val, addr + 4*_ALIGN);
 }
 
 static inline u8 inreg8(void __iomem *addr)
 {
-	return ioread32(addr);
+	return readl(addr);
 }
 
 static inline u32 inreg32(void __iomem *addr)
 {
-	return (inreg8(addr) << 24) |
-		(inreg8(addr + 0x4*2) << 16) |
-		(inreg8(addr + 0x8*2) <<  8) |
-		(inreg8(addr + 0xc*2) <<  0);
+	return  (inreg8(addr)              << 24) |
+			(inreg8(addr + 0x4*_ALIGN) << 16) |
+			(inreg8(addr + 0x8*_ALIGN) <<  8) |
+			(inreg8(addr + 0xc*_ALIGN) <<  0);
 }
 
 static int liteeth_rx(struct net_device *netdev)
@@ -109,7 +116,7 @@ static int liteeth_rx(struct net_device *netdev)
 
 	skb = netdev_alloc_skb(netdev, len + NET_IP_ALIGN);
 	if (!skb) {
-		netdev_err(netdev, "couldn't get memory");
+		netdev_err(netdev, "couldn't get memory (len=%d)", len);
 		netdev->stats.rx_dropped++;
 		return NET_RX_DROP;
 	}
