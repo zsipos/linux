@@ -3,7 +3,7 @@
 #
 
 config NET_VENDOR_LITEX
-	bool "LiteX devices"
+	bool "LiteX SoC devices"
 	default y
 	---help---
 	  If you have a network (Ethernet) card belonging to this class, say Y.
@@ -16,12 +16,12 @@ config NET_VENDOR_LITEX
 if NET_VENDOR_LITEX
 
 config LITEX_LITEETH
-	tristate "LiteX Ethernet support"
+	tristate "LiteX SoC Ethernet support"
 	select NET_CORE
 	select MII
 	select PHYLIB
 	---help---
-	  If you wish to compile a kernel for hardware with a LiteX LiteEth
+	  If you wish to compile a kernel for hardware with a LiteX SoC LiteEth
 	  device then you should answer Y to this.
 
 endif # NET_VENDOR_LITEX

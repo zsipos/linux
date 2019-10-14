@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/spi/spi.h>
+#include <soc/litex/litex.h>
 
 #define DRIVER_NAME					"zsipos_spi"
 #define FIFOSIZE 					256
@@ -30,13 +31,12 @@
 #define ZSIPOS_SPI_NUM_CHIPSELECTS	8
 #define ZSIPOS_SPI_FILL_BYTE		0x00
 
-#define BUSALIGN					4
-#define ZSIPOS_SPI_REG_SPCR			(0x0*BUSALIGN)
-#define ZSIPOS_SPI_REG_SPSR			(0x1*BUSALIGN)
-#define ZSIPOS_SPI_REG_SPDR			(0x2*BUSALIGN)
-#define ZSIPOS_SPI_REG_SPER			(0x3*BUSALIGN)
-#define ZSIPOS_SPI_REG_SSR			(0x4*BUSALIGN)
-#define ZSIPOS_SPI_REG_ICNT			(0x5*BUSALIGN)
+#define ZSIPOS_SPI_REG_SPCR			LITEX_BUS_OFFSET(0x0)
+#define ZSIPOS_SPI_REG_SPSR			LITEX_BUS_OFFSET(0x1)
+#define ZSIPOS_SPI_REG_SPDR			LITEX_BUS_OFFSET(0x2)
+#define ZSIPOS_SPI_REG_SPER			LITEX_BUS_OFFSET(0x3)
+#define ZSIPOS_SPI_REG_SSR			LITEX_BUS_OFFSET(0x4)
+#define ZSIPOS_SPI_REG_ICNT			LITEX_BUS_OFFSET(0x5)
 
 #define ZSIPOS_SPI_SPCR_SPIE		(1 << 7)
 #define ZSIPOS_SPI_SPCR_SPEN		(1 << 6)
@@ -484,9 +484,7 @@ static int zsipos_spi_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id zsipos_spi_match[] = {
-	{
-		.compatible = "zsipos,spi",
-	},
+	{ .compatible = "zsipos,spi" },
 	{},
 };
 MODULE_DEVICE_TABLE(of, zsipos_spi_match);

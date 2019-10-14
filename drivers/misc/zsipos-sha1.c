@@ -27,6 +27,7 @@
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
+#include <soc/litex/litex.h>
 
 #define DRVNAME	"zsipos_sha1"
 
@@ -163,9 +164,7 @@ static int zsipos_sha1_remove(struct platform_device *pdev)
 }
 
 static const struct of_device_id zsipos_sha1_dt_match[] = {
-	{
-		.compatible = "zsipos,sha1",
-	},
+	{ .compatible = "zsipos,sha1" },
 	{},
 };
 MODULE_DEVICE_TABLE(of, zsipos_sha1_dt_match);

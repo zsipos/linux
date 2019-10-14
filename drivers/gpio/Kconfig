@@ -288,6 +288,12 @@ config GPIO_IOP
 
 	  If unsure, say N.
 
+config GPIO_LITEX
+	tristate "LiteX SoC GPIO support"
+	depends on OF && HAS_IOMEM
+	help
+	  driver for GPIO functionality on LiteX SoC
+
 config GPIO_LOONGSON
 	bool "Loongson-2/3 GPIO support"
 	depends on CPU_LOONGSON2 || CPU_LOONGSON3

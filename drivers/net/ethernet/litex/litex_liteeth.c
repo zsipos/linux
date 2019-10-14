@@ -13,42 +13,36 @@
 #include <linux/of_address.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
-
 #include <linux/iopoll.h>
+#include <soc/litex/litex.h>
 
 #define DRV_NAME	"liteeth"
 #define DRV_VERSION	"0.1"
 
-#ifdef _LP64
-#define _ALIGN 2
-#else
-#define _ALIGN 1
-#endif
+#define LITEETH_WRITER_SLOT		LITEX_CSR_OFFSET(0x00)
+#define LITEETH_WRITER_LENGTH		LITEX_CSR_OFFSET(0x01)
+#define LITEETH_WRITER_ERRORS		LITEX_CSR_OFFSET(0x05)
+#define LITEETH_WRITER_EV_STATUS	LITEX_CSR_OFFSET(0x09)
+#define LITEETH_WRITER_EV_PENDING	LITEX_CSR_OFFSET(0x0a)
+#define LITEETH_WRITER_EV_ENABLE	LITEX_CSR_OFFSET(0x0b)
+#define LITEETH_READER_START		LITEX_CSR_OFFSET(0x0c)
+#define LITEETH_READER_READY		LITEX_CSR_OFFSET(0x0d)
+#define LITEETH_READER_LEVEL		LITEX_CSR_OFFSET(0x0e)
+#define LITEETH_READER_SLOT		LITEX_CSR_OFFSET(0x0f)
+#define LITEETH_READER_LENGTH		LITEX_CSR_OFFSET(0x10)
+#define LITEETH_READER_EV_STATUS	LITEX_CSR_OFFSET(0x12)
+#define LITEETH_READER_EV_PENDING	LITEX_CSR_OFFSET(0x13)
+#define LITEETH_READER_EV_ENABLE	LITEX_CSR_OFFSET(0x14)
+#define LITEETH_PREAMBLE_CRC		LITEX_CSR_OFFSET(0x15)
+#define LITEETH_PREAMBLE_ERRORS		LITEX_CSR_OFFSET(0x16)
+#define LITEETH_CRC_ERRORS		LITEX_CSR_OFFSET(0x1a)
 
-#define LITEETH_WRITER_SLOT			0x00*_ALIGN
-#define LITEETH_WRITER_LENGTH		0x04*_ALIGN
-#define LITEETH_WRITER_ERRORS		0x14*_ALIGN
-#define LITEETH_WRITER_EV_STATUS	0x24*_ALIGN
-#define LITEETH_WRITER_EV_PENDING	0x28*_ALIGN
-#define LITEETH_WRITER_EV_ENABLE	0x2c*_ALIGN
-#define LITEETH_READER_START		0x30*_ALIGN
-#define LITEETH_READER_READY		0x34*_ALIGN
-#define LITEETH_READER_LEVEL		0x38*_ALIGN
-#define LITEETH_READER_SLOT			0x3c*_ALIGN
-#define LITEETH_READER_LENGTH		0x40*_ALIGN
-#define LITEETH_READER_EV_STATUS	0x48*_ALIGN
-#define LITEETH_READER_EV_PENDING	0x4c*_ALIGN
-#define LITEETH_READER_EV_ENABLE	0x50*_ALIGN
-#define LITEETH_PREAMBLE_CRC		0x54*_ALIGN
-#define LITEETH_PREAMBLE_ERRORS		0x58*_ALIGN
-#define LITEETH_CRC_ERRORS			0x68*_ALIGN
+#define LITEETH_PHY_CRG_RESET		0x00
+#define LITEETH_MDIO_W			0x04
+#define LITEETH_MDIO_R			0x08
 
-#define LITEETH_PHY_CRG_RESET		0x00*_ALIGN
-#define LITEETH_MDIO_W				0x04*_ALIGN
-#define LITEETH_MDIO_R				0x08*_ALIGN
-
-#define LITEETH_BUFFER_SIZE			0x800
-#define MAX_PKT_SIZE				LITEETH_BUFFER_SIZE
+#define LITEETH_BUFFER_SIZE		0x800
+#define MAX_PKT_SIZE			LITEETH_BUFFER_SIZE
 
 struct liteeth {
 	void __iomem *base;
@@ -74,33 +68,23 @@ struct liteeth {
 	void __iomem *rx_base;
 };
 
-/* Helper routines for accessing MMIO over a wishbone bus.
- * Each 32 bit memory location contains a single byte of data, stored
- * little endian
- */
-
 static inline void outreg8(u8 val, void __iomem *addr)
 {
-	writel(val, addr);
+	litex_csr_writeb(val, addr);
 }
 
 static inline void outreg16(u16 val, void __iomem *addr)
-{
-	outreg8(val >> 8, addr);
-	outreg8(val, addr + 4*_ALIGN);
+{	litex_csr_writew(val, addr);
 }
 
 static inline u8 inreg8(void __iomem *addr)
 {
-	return readl(addr);
+	return litex_csr_readb(addr);
 }
 
 static inline u32 inreg32(void __iomem *addr)
 {
-	return  (inreg8(addr)              << 24) |
-			(inreg8(addr + 0x4*_ALIGN) << 16) |
-			(inreg8(addr + 0x8*_ALIGN) <<  8) |
-			(inreg8(addr + 0xc*_ALIGN) <<  0);
+	return litex_csr_readl(addr);
 }
 
 static int liteeth_rx(struct net_device *netdev)
@@ -116,7 +100,7 @@ static int liteeth_rx(struct net_device *netdev)
 
 	skb = netdev_alloc_skb(netdev, len + NET_IP_ALIGN);
 	if (!skb) {
-		netdev_err(netdev, "couldn't get memory (len=%d)", len);
+		netdev_err(netdev, "couldn't get memory");
 		netdev->stats.rx_dropped++;
 		return NET_RX_DROP;
 	}
@@ -362,8 +346,6 @@ static int liteeth_probe(struct platform_device *pdev)
 		goto err;
 	}
 
-/* FIXME: property indicating LiteX MMIO/CSR (32 vs 64 bit) alignment? */
-
 	/* Rx slots */
 	priv->rx_base = buf_base;
 	priv->rx_slot = 0;
@@ -372,11 +354,7 @@ static int liteeth_probe(struct platform_device *pdev)
 	priv->tx_base = buf_base + priv->num_rx_slots * LITEETH_BUFFER_SIZE;
 	priv->tx_slot = 0;
 
-#if 0 /* FIXME(gls): why does this generate a "load fccess fault" ? */
 	mac_addr = of_get_mac_address(np);
-#else
-	mac_addr = NULL;
-#endif
 	if (mac_addr && is_valid_ether_addr(mac_addr))
 		memcpy(netdev->dev_addr, mac_addr, ETH_ALEN);
 	else
@@ -389,15 +367,15 @@ static int liteeth_probe(struct platform_device *pdev)
 	netdev->ethtool_ops = &liteeth_ethtool_ops;
 	netdev->irq = irq;
 
+	liteeth_reset_hw(priv);
+
 	err = register_netdev(netdev);
 	if (err) {
 		dev_err(&pdev->dev, "Failed to register netdev\n");
 		goto err;
 	}
 
-	liteeth_reset_hw(priv);
-
-	netdev_info(netdev, "loaded\n");
+	netdev_info(netdev, "irq %d, mapped at %px\n", netdev->irq, priv->base);
 
 	return 0;
 err:
