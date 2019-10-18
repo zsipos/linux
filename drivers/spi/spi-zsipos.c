@@ -168,6 +168,8 @@ static int zsipos_spi_setup_transfer(struct spi_device *spi, struct spi_transfer
 
 static void zsipos_spi_set_cs(struct zsipos_spi *zsipos_spi, int mask)
 {
+	if (zsipos_spi->last_mode & SPI_CS_HIGH)
+		mask = ~mask;
 	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SSR, mask);
 }
 
@@ -400,11 +402,7 @@ static int zsipos_spi_probe(struct platform_device *pdev)
 
 	master->bus_num = -1;
 
-	/*
-	 * we support only mode 0 for now, and no options...
-	 * but we can support CPHA setting -- to be implemented
-	 */
-	master->mode_bits = SPI_MODE_3;
+	master->mode_bits = SPI_CPHA | SPI_CPOL | SPI_CS_HIGH;
 
 	master->setup = zsipos_spi_setup;
 	master->transfer_one_message = zsipos_spi_transfer_one_message;
