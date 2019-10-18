@@ -14,6 +14,7 @@
  * published by the Free Software Foundation.
  */
 
+#include <linux/clk.h>
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/init.h>
@@ -56,6 +57,7 @@
 
 struct zsipos_spi {
 	struct spi_master	*master;
+	struct clk          *clk;
 	void	__iomem		*base;
 	void	__iomem		*reg_spsr;
 	void	__iomem		*reg_spdr;
@@ -86,17 +88,13 @@ static int zsipos_spi_set_transfer_size(struct zsipos_spi *zsipos_spi, unsigned 
 	return 0;
 }
 
-static int zsipos_spi_get_clock_frequency(void)
-{
-	return 60000000;
-}
-
-static void zsipos_spi_set_baudrate_bits(u8* spcr, u8* sper, unsigned int speed)
+static void zsipos_spi_set_baudrate_bits(u8* spcr, u8* sper,
+		unsigned int speed, unsigned int clock_frequency)
 {
 	int i;
 
 	for (i = 0; i < 11; i++) {
-		if ((zsipos_spi_get_clock_frequency() >> (1+i)) <= speed) {
+		if ((clock_frequency >> (1+i)) <= speed) {
 			break;
 		}
 	}
@@ -159,7 +157,7 @@ static int zsipos_spi_setup_transfer(struct spi_device *spi, struct spi_transfer
 	spcr = zsipos_spi_read(zsipos_spi, ZSIPOS_SPI_REG_SPCR);
 	sper = zsipos_spi_read(zsipos_spi, ZSIPOS_SPI_REG_SPER);
 
-	zsipos_spi_set_baudrate_bits(&spcr, &sper, speed);
+	zsipos_spi_set_baudrate_bits(&spcr, &sper, speed, clk_get_rate(zsipos_spi->clk));
 	zsipos_spi_set_mode_bits(&spcr, spi->mode);
 
 	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SPCR, spcr);
@@ -422,9 +420,15 @@ static int zsipos_spi_probe(struct platform_device *pdev)
 
 	init_completion(&spi->transferdone);
 
+	spi->clk = devm_clk_get(&pdev->dev, NULL);
+	if (IS_ERR(spi->clk)) {
+		dev_err(&pdev->dev, "Unable to find bus clock\n");
+		status = PTR_ERR(spi->clk);
+		goto out;
+	}
 
-	spi->max_speed = zsipos_spi_get_clock_frequency() >> 1;
-	spi->min_speed = zsipos_spi_get_clock_frequency() >> 12;
+	spi->max_speed = clk_get_rate(spi->clk) >> 1;
+	spi->min_speed = clk_get_rate(spi->clk) >> 12;
 
 	spi->last_speed = -1;
 	spi->last_mode  = -1;
