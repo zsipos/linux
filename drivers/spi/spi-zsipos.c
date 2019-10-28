@@ -191,7 +191,6 @@ static void zsipos_spi_xfer_chunk(struct zsipos_spi *zsipos_spi, const u8 *txdat
 	u32 __iomem *datareg = zsipos_spi->reg_spdr;
 	u32 __iomem *statreg = zsipos_spi->reg_spsr;
 	unsigned int i;
-	u8 dummy;
 
 	if (len >= MINIRQ) {
 		zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_ICNT, len-1);
@@ -334,10 +333,8 @@ msg_done:
 	if (cs_active)
 		zsipos_spi_set_cs(zsipos_spi, 0);
 
-	if (m->context != (void*)-1) {
-		m->status = status;
-		spi_finalize_current_message(master);
-	}
+	m->status = status;
+	spi_finalize_current_message(master);
 
 	return 0;
 }
