@@ -66,16 +66,16 @@ static inline void litex_csr_writeb(u8 val, void __iomem *reg)
 
 static inline void litex_csr_writew(u16 val, void __iomem *reg)
 {
-	LITEX_WRITE_REG(val >> 8, reg                      );
-	LITEX_WRITE_REG(val     , reg + LITEX_CSR_OFFSET(1));
+	litex_csr_writeb(val >>  8, reg + LITEX_CSR_OFFSET(0));
+	litex_csr_writeb(val >>  0, reg + LITEX_CSR_OFFSET(1));
 }
 
 static inline void litex_csr_writel(u32 val, void __iomem *reg)
 {
-	LITEX_WRITE_REG(val >> 24, reg                      );
-	LITEX_WRITE_REG(val >> 16, reg + LITEX_CSR_OFFSET(1));
-	LITEX_WRITE_REG(val >>  8, reg + LITEX_CSR_OFFSET(2));
-	LITEX_WRITE_REG(val      , reg + LITEX_CSR_OFFSET(3));
+	litex_csr_writeb(val >> 24, reg + LITEX_CSR_OFFSET(0));
+	litex_csr_writeb(val >> 16, reg + LITEX_CSR_OFFSET(1));
+	litex_csr_writeb(val >>  8, reg + LITEX_CSR_OFFSET(2));
+	litex_csr_writeb(val >>  0, reg + LITEX_CSR_OFFSET(3));
 }
 
 static inline u8 litex_csr_readb(void __iomem *reg)
@@ -85,15 +85,16 @@ static inline u8 litex_csr_readb(void __iomem *reg)
 
 static inline u16 litex_csr_readw(void __iomem *reg)
 {
-	return (LITEX_READ_REG(reg) << 8) | LITEX_READ_REG(reg + LITEX_CSR_OFFSET(1));
+	return 	((u16)litex_csr_readb(reg + LITEX_CSR_OFFSET(0)) <<  8) |
+			((u16)litex_csr_readb(reg + LITEX_CSR_OFFSET(1)) <<  0);
 }
 
 static inline u32 litex_csr_readl(void __iomem * reg)
 {
-	return  (LITEX_READ_REG(reg)                       << 24) |
-			(LITEX_READ_REG(reg + LITEX_CSR_OFFSET(1)) << 16) |
-			(LITEX_READ_REG(reg + LITEX_CSR_OFFSET(2)) <<  8) |
-			(LITEX_READ_REG(reg + LITEX_CSR_OFFSET(3))      );
+	return  ((u32)litex_csr_readb(reg + LITEX_CSR_OFFSET(0)) << 24) |
+			((u32)litex_csr_readb(reg + LITEX_CSR_OFFSET(1)) << 16) |
+			((u32)litex_csr_readb(reg + LITEX_CSR_OFFSET(2)) <<  8) |
+			((u32)litex_csr_readb(reg + LITEX_CSR_OFFSET(3)) <<  0);
 }
 
 #endif /* _LINUX_LITEX_H */
