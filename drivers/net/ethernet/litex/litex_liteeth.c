@@ -74,7 +74,8 @@ static inline void outreg8(u8 val, void __iomem *addr)
 }
 
 static inline void outreg16(u16 val, void __iomem *addr)
-{	litex_csr_writew(val, addr);
+{
+	litex_csr_writew(val, addr);
 }
 
 static inline u8 inreg8(void __iomem *addr)
@@ -228,7 +229,7 @@ static int liteeth_start_xmit(struct sk_buff *skb, struct net_device *netdev)
 	}
 
 	txbuffer = priv->tx_base + priv->tx_slot * LITEETH_BUFFER_SIZE;
-	memcpy_fromio(txbuffer, skb->data, skb->len);
+	memcpy_toio(txbuffer, skb->data, skb->len);
 	outreg8(priv->tx_slot, priv->base + LITEETH_READER_SLOT);
 	outreg16(skb->len, priv->base + LITEETH_READER_LENGTH);
 
