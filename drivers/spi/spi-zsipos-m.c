@@ -31,12 +31,12 @@
 #define LITEX_SPIM_EV_ENABLE_REG     LITEX_CSR_OFFSET(2)  // u8
 #define LITEX_SPIM_MODE_REG          LITEX_CSR_OFFSET(3)  // u8
 #define LITEX_SPIM_DIVCLK_REG        LITEX_CSR_OFFSET(4)  // u16
-#define LITEX_SPIM_LENGTH_REG        LITEX_CSR_OFFSET(6)  // u32
-#define LITEX_SPIM_CONTROL_REG       LITEX_CSR_OFFSET(10) // u8
-#define LITEX_SPIM_CS_REG            LITEX_CSR_OFFSET(11) // u8
-#define LITEX_SPIM_STATUS_REG        LITEX_CSR_OFFSET(12) // u8
-#define LITEX_SPIM_TXADR_REG         LITEX_CSR_OFFSET(13) // u32
-#define LITEX_SPIM_RXADR_REG         LITEX_CSR_OFFSET(17) // u32
+#define LITEX_SPIM_LENGTH_REG        LITEX_CSR_OFFSET(6)  // u16
+#define LITEX_SPIM_CONTROL_REG       LITEX_CSR_OFFSET(8)  // u8
+#define LITEX_SPIM_CS_REG            LITEX_CSR_OFFSET(9)  // u8
+#define LITEX_SPIM_STATUS_REG        LITEX_CSR_OFFSET(10) // u8
+#define LITEX_SPIM_TXADR_REG         LITEX_CSR_OFFSET(11) // u32
+#define LITEX_SPIM_RXADR_REG         LITEX_CSR_OFFSET(15) // u32
 
 #define LITEX_SPIM_CONTROL_START     (1<<0)
 #define LITEX_SPIM_CONTROL_NOSND     (1<<1)
@@ -144,7 +144,7 @@ static void zsipos_spim_xfer_mem(struct zsipos_spim *zsipos_spim, const u8 *txda
 
 	reinit_completion(&zsipos_spim->transferdone);
 
-	litex_csr_writel(len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
+	litex_csr_writew(len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
 	litex_csr_writeb(control, zsipos_spim->csr_base + LITEX_SPIM_CONTROL_REG);
 
 	wait_for_completion(&zsipos_spim->transferdone);
@@ -168,7 +168,7 @@ static void zsipos_spim_xfer_mini(struct zsipos_spim *zsipos_spim, const u8 *txd
 	if (!rxdata)
 		control |= LITEX_SPIM_CONTROL_NORCV;
 
-	litex_csr_writel(len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
+	litex_csr_writew(len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
 	litex_csr_writeb(control, zsipos_spim->csr_base + LITEX_SPIM_CONTROL_REG);
 
 	while(litex_csr_readb(zsipos_spim->csr_base + LITEX_SPIM_STATUS_REG))
@@ -232,7 +232,7 @@ static unsigned zsipos_spim_write_read_dma(struct zsipos_spim *zsipos_spim, stru
 
 	reinit_completion(&zsipos_spim->transferdone);
 
-	litex_csr_writel(xfer->len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
+	litex_csr_writew(xfer->len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
 	litex_csr_writeb(control, zsipos_spim->csr_base + LITEX_SPIM_CONTROL_REG);
 
 	wait_for_completion(&zsipos_spim->transferdone);
