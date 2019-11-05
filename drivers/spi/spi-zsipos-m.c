@@ -31,12 +31,12 @@
 #define LITEX_SPIM_EV_ENABLE_REG     LITEX_CSR_OFFSET(2)  // u8
 #define LITEX_SPIM_MODE_REG          LITEX_CSR_OFFSET(3)  // u8
 #define LITEX_SPIM_DIVCLK_REG        LITEX_CSR_OFFSET(4)  // u16
-#define LITEX_SPIM_LENGTH_REG        LITEX_CSR_OFFSET(6)  // u16
-#define LITEX_SPIM_CONTROL_REG       LITEX_CSR_OFFSET(8)  // u8
-#define LITEX_SPIM_CS_REG            LITEX_CSR_OFFSET(9)  // u8
-#define LITEX_SPIM_STATUS_REG        LITEX_CSR_OFFSET(10) // u8
-#define LITEX_SPIM_TXADR_REG         LITEX_CSR_OFFSET(11) // u32
-#define LITEX_SPIM_RXADR_REG         LITEX_CSR_OFFSET(15) // u32
+#define LITEX_SPIM_LENGTH_REG        LITEX_CSR_OFFSET(6)  // u32
+#define LITEX_SPIM_CONTROL_REG       LITEX_CSR_OFFSET(10) // u8
+#define LITEX_SPIM_CS_REG            LITEX_CSR_OFFSET(11) // u8
+#define LITEX_SPIM_STATUS_REG        LITEX_CSR_OFFSET(12) // u8
+#define LITEX_SPIM_TXADR_REG         LITEX_CSR_OFFSET(13) // u32
+#define LITEX_SPIM_RXADR_REG         LITEX_CSR_OFFSET(17) // u32
 
 #define LITEX_SPIM_CONTROL_START     (1<<0)
 #define LITEX_SPIM_CONTROL_NOSND     (1<<1)
@@ -59,10 +59,11 @@ struct zsipos_spim {
 	u32			        mem_size;
 	int                 irq;
 	struct completion   transferdone;
-	unsigned int		last_speed;
-	unsigned int		last_mode;
-	unsigned int		max_speed;
-	unsigned int		min_speed;
+	unsigned long		clockspeed;
+	u32					last_speed;
+	u16					last_mode;
+	u32					max_speed;
+	u32					min_speed;
 };
 
 /*
@@ -72,18 +73,14 @@ struct zsipos_spim {
 static int zsipos_spim_setup_transfer(struct spi_device *spi, struct spi_transfer *t)
 {
 	struct zsipos_spim *zsipos_spim;
-	unsigned int speed;
-	unsigned int bits_per_word;
+	u32 speed;
 
 	zsipos_spim = spi_master_get_devdata(spi->master);
 
-	if (t) {
+	if (t)
 		speed = t->speed_hz ? t->speed_hz : spi->max_speed_hz;
-		bits_per_word = t->bits_per_word ? t->bits_per_word : spi->bits_per_word;
-	} else {
+	else
 		speed = spi->max_speed_hz;
-		bits_per_word = spi->bits_per_word;
-	}
 
 	if (spi->mode != zsipos_spim->last_mode) {
 		u8 mode = 0;
@@ -100,8 +97,8 @@ static int zsipos_spim_setup_transfer(struct spi_device *spi, struct spi_transfe
 	}
 
 	if (speed != zsipos_spim->last_speed) {
-		unsigned int clockspeed = clk_get_rate(zsipos_spim->clk);
-		unsigned int i;
+		unsigned long clockspeed = zsipos_spim->clockspeed;
+		unsigned i;
 
 		for (i = 0; i < (2<<16); i++)
 			if (DIV_ROUND_UP(clockspeed, ((i+1)*2)) <= speed)
@@ -109,11 +106,6 @@ static int zsipos_spim_setup_transfer(struct spi_device *spi, struct spi_transfe
 
 		litex_csr_writew(i, zsipos_spim->csr_base + LITEX_SPIM_DIVCLK_REG);
 		zsipos_spim->last_speed = speed;
-	}
-
-	if (bits_per_word != 8) {
-		printk("Bad transfer size: %d\n", bits_per_word);
-		return -EINVAL;
 	}
 
 	return 0;
@@ -152,7 +144,7 @@ static void zsipos_spim_xfer_mem(struct zsipos_spim *zsipos_spim, const u8 *txda
 
 	reinit_completion(&zsipos_spim->transferdone);
 
-	litex_csr_writew(len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
+	litex_csr_writel(len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
 	litex_csr_writeb(control, zsipos_spim->csr_base + LITEX_SPIM_CONTROL_REG);
 
 	wait_for_completion(&zsipos_spim->transferdone);
@@ -176,7 +168,7 @@ static void zsipos_spim_xfer_mini(struct zsipos_spim *zsipos_spim, const u8 *txd
 	if (!rxdata)
 		control |= LITEX_SPIM_CONTROL_NORCV;
 
-	litex_csr_writew(len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
+	litex_csr_writel(len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
 	litex_csr_writeb(control, zsipos_spim->csr_base + LITEX_SPIM_CONTROL_REG);
 
 	while(litex_csr_readb(zsipos_spim->csr_base + LITEX_SPIM_STATUS_REG))
@@ -220,35 +212,39 @@ static unsigned zsipos_spim_write_read_dma(struct zsipos_spim *zsipos_spim, stru
 {
 	u8 control = LITEX_SPIM_CONTROL_START;
 
+	printk("len=%d\n", xfer->len);
+
 	if (xfer->tx_dma) {
-		dma_sync_single_for_device(zsipos_spim->master->dev.parent, xfer->tx_dma, xfer->len, DMA_TO_DEVICE);
+		//dma_sync_single_for_device(zsipos_spim->master->dev.parent, xfer->tx_dma, xfer->len, DMA_TO_DEVICE);
 		litex_csr_writel(xfer->tx_dma, zsipos_spim->csr_base + LITEX_SPIM_TXADR_REG);
 	}
 	else
 		control |= LITEX_SPIM_CONTROL_NOSND;
 
 	if (xfer->rx_dma) {
-		dma_sync_single_for_device(zsipos_spim->master->dev.parent, xfer->rx_dma, xfer->len, DMA_FROM_DEVICE);
+		//dma_sync_single_for_device(zsipos_spim->master->dev.parent, xfer->rx_dma, xfer->len, DMA_FROM_DEVICE);
 		litex_csr_writel(xfer->rx_dma, zsipos_spim->csr_base + LITEX_SPIM_RXADR_REG);
-	} else
+	}
+	else
 		control |= LITEX_SPIM_CONTROL_NORCV;
 
 	litex_csr_writeb(1, zsipos_spim->csr_base + LITEX_SPIM_EV_ENABLE_REG);
 
 	reinit_completion(&zsipos_spim->transferdone);
 
-	litex_csr_writew(xfer->len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
+	litex_csr_writel(xfer->len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
 	litex_csr_writeb(control, zsipos_spim->csr_base + LITEX_SPIM_CONTROL_REG);
 
 	wait_for_completion(&zsipos_spim->transferdone);
 
 	litex_csr_writeb(0, zsipos_spim->csr_base + LITEX_SPIM_EV_ENABLE_REG);
 
-	if (xfer->tx_dma)
-		dma_sync_single_for_cpu(zsipos_spim->master->dev.parent, xfer->tx_dma, xfer->len, DMA_TO_DEVICE);
+//	if (xfer->tx_dma)
+//		dma_sync_single_for_cpu(zsipos_spim->master->dev.parent, xfer->tx_dma, xfer->len, DMA_TO_DEVICE);
+//	if (xfer->rx_dma)
+//		dma_sync_single_for_cpu(zsipos_spim->master->dev.parent, xfer->rx_dma, xfer->len, DMA_FROM_DEVICE);
 
-	if (xfer->rx_dma)
-		dma_sync_single_for_cpu(zsipos_spim->master->dev.parent, xfer->rx_dma, xfer->len, DMA_FROM_DEVICE);
+	printk("done\n");
 
 	return xfer->len;
 }
@@ -313,13 +309,8 @@ msg_done:
 
 static int zsipos_spim_reset(struct zsipos_spim *zsipos_spim)
 {
-	/* Verify that cs is deasserted */
 	zsipos_spim_set_cs(zsipos_spim, 0);
-
-	/* clear pending interrupt */
 	litex_csr_writeb(1, zsipos_spim->csr_base + LITEX_SPIM_EV_PENDING_REG);
-
-	/* disable interrupt */
 	litex_csr_writeb(0, zsipos_spim->csr_base + LITEX_SPIM_EV_ENABLE_REG);
 
 	return 0;
@@ -349,6 +340,7 @@ static int zsipos_spim_setup(struct spi_device *spi)
 	/*
 	 * baudrate & width will be set by zsipos_spim_setup_transfer
 	 */
+
 	return 0;
 }
 
@@ -386,7 +378,7 @@ static int zsipos_spim_probe(struct platform_device *pdev)
 
 	status = of_property_read_u32(pdev->dev.of_node, "can-dma", &val);
 	if (status == 0 && val) {
-		dev_info(&pdev->dev, "dma enabled.\n");
+		dev_info(&pdev->dev, "dma enabled\n");
 		master->can_dma = zsipos_spim_can_dma;
 		master->dma_alignment = 4;
 	}
@@ -410,8 +402,9 @@ static int zsipos_spim_probe(struct platform_device *pdev)
 		goto out;
 	}
 
-	spi->max_speed = clk_get_rate(spi->clk) >> 1;
-	spi->min_speed = clk_get_rate(spi->clk) >> 12;
+	spi->clockspeed = clk_get_rate(spi->clk);
+	spi->max_speed  = spi->clockspeed / (1<<1);
+	spi->min_speed  = spi->clockspeed / (1<<16);
 
 	spi->last_speed = -1;
 	spi->last_mode  = -1;
