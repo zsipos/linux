@@ -58,6 +58,7 @@ struct zsipos_spim {
 	u32                 mem_addr; // physical address
 	u32			        mem_size;
 	int                 irq;
+	bool                irq_enabled;
 	struct completion   transferdone;
 	unsigned long		clockspeed;
 	u32					last_speed;
@@ -130,6 +131,14 @@ static irqreturn_t zsipos_spim_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+static void zsipos_spim_enable_irq(struct zsipos_spim *zsipos_spim, bool enabled)
+{
+	if (zsipos_spim->irq_enabled != enabled) {
+		zsipos_spim->irq_enabled = enabled;
+		litex_csr_writeb(enabled, zsipos_spim->csr_base + LITEX_SPIM_EV_ENABLE_REG);
+	}
+}
+
 static void zsipos_spim_xfer_mem(struct zsipos_spim *zsipos_spim, const u8 *txdata, u8 *rxdata, unsigned len)
 {
 	u8 control = LITEX_SPIM_CONTROL_START;
@@ -158,6 +167,8 @@ static void zsipos_spim_xfer_mini(struct zsipos_spim *zsipos_spim, const u8 *txd
 	u8 control = LITEX_SPIM_CONTROL_START;
 	u8 __iomem *mem = zsipos_spim->mem_base;
 	int i;
+
+	zsipos_spim_enable_irq(zsipos_spim, false);
 
 	if (txdata) {
 		for (i = 0; i < len; i++)
@@ -188,7 +199,7 @@ static void zsipos_spim_xfer_chunk(struct zsipos_spim *zsipos_spim, const u8 *tx
 		unsigned int memsize = zsipos_spim->mem_size;
 		unsigned int i, r = len % memsize;
 
-		litex_csr_writeb(1, zsipos_spim->csr_base + LITEX_SPIM_EV_ENABLE_REG);
+		zsipos_spim_enable_irq(zsipos_spim, true);
 
 		for (i = 0; i < len / memsize; i++) {
 			zsipos_spim_xfer_mem(zsipos_spim, txdata, rxdata, memsize);
@@ -197,8 +208,6 @@ static void zsipos_spim_xfer_chunk(struct zsipos_spim *zsipos_spim, const u8 *tx
 		}
 		if (r)
 			zsipos_spim_xfer_mem(zsipos_spim, txdata, rxdata, r);
-
-		litex_csr_writeb(0, zsipos_spim->csr_base + LITEX_SPIM_EV_ENABLE_REG);
 	}
 }
 
@@ -214,6 +223,8 @@ static unsigned zsipos_spim_write_read_dma(struct zsipos_spim *zsipos_spim, stru
 
 	printk("len=%d\n", xfer->len);
 
+	zsipos_spim_enable_irq(zsipos_spim, true);
+
 	if (xfer->tx_dma) {
 		//dma_sync_single_for_device(zsipos_spim->master->dev.parent, xfer->tx_dma, xfer->len, DMA_TO_DEVICE);
 		litex_csr_writel(xfer->tx_dma, zsipos_spim->csr_base + LITEX_SPIM_TXADR_REG);
@@ -228,16 +239,12 @@ static unsigned zsipos_spim_write_read_dma(struct zsipos_spim *zsipos_spim, stru
 	else
 		control |= LITEX_SPIM_CONTROL_NORCV;
 
-	litex_csr_writeb(1, zsipos_spim->csr_base + LITEX_SPIM_EV_ENABLE_REG);
-
 	reinit_completion(&zsipos_spim->transferdone);
 
 	litex_csr_writew(xfer->len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
 	litex_csr_writeb(control, zsipos_spim->csr_base + LITEX_SPIM_CONTROL_REG);
 
 	wait_for_completion(&zsipos_spim->transferdone);
-
-	litex_csr_writeb(0, zsipos_spim->csr_base + LITEX_SPIM_EV_ENABLE_REG);
 
 //	if (xfer->tx_dma)
 //		dma_sync_single_for_cpu(zsipos_spim->master->dev.parent, xfer->tx_dma, xfer->len, DMA_TO_DEVICE);
@@ -312,6 +319,7 @@ static int zsipos_spim_reset(struct zsipos_spim *zsipos_spim)
 	zsipos_spim_set_cs(zsipos_spim, 0);
 	litex_csr_writeb(1, zsipos_spim->csr_base + LITEX_SPIM_EV_PENDING_REG);
 	litex_csr_writeb(0, zsipos_spim->csr_base + LITEX_SPIM_EV_ENABLE_REG);
+	zsipos_spim_enable_irq(zsipos_spim, false);
 
 	return 0;
 }
