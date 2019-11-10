@@ -448,8 +448,8 @@ static int zsipos_spim_probe(struct platform_device *pdev)
 	}
 	spi->mem_base = devm_ioremap_nocache(&pdev->dev, r->start,
 			resource_size(r));
-	if (IS_ERR(spi->csr_base)) {
-		status = PTR_ERR(spi->csr_base);
+	if (IS_ERR(spi->mem_base)) {
+		status = PTR_ERR(spi->mem_base);
 		goto out;
 	}
 
