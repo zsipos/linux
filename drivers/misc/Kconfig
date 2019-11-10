@@ -517,6 +517,10 @@ config ZSIPOS_AES
 	tristate "zsipos aes driver"
 	default n
 	
+config ZSIPOS_DMATEST
+	tristate "zsipos dmatest driver"
+	default n
+	
 config ZSIPOS_SHA1
 	tristate "zsipos sha1 driver"
 	default n
