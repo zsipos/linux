@@ -398,6 +398,12 @@ config MMC_SDHCI_ST
 	  If you have a controller with this interface, say Y or M here.
 	  If unsure, say N.
 
+config MMC_OCSDC
+    tristate "OpenCores SD Card Controller IP Core support"
+    help
+      This selects support for the OpenCores SD Card Controller 
+      IP Core. If unsure, say N.
+          
 config MMC_OMAP
 	tristate "TI OMAP Multimedia Card Interface support"
 	depends on ARCH_OMAP
