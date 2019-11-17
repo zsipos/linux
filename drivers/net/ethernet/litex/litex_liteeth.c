@@ -356,7 +356,7 @@ static int liteeth_probe(struct platform_device *pdev)
 	priv->tx_slot = 0;
 
 	mac_addr = of_get_mac_address(np);
-	if (!IS_ERR(mac_addr))
+	if (mac_addr && !IS_ERR(mac_addr) && is_valid_ether_addr(mac_addr))
 		memcpy(netdev->dev_addr, mac_addr, ETH_ALEN);
 	else
 		eth_hw_addr_random(netdev);
