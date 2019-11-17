@@ -227,7 +227,7 @@ void __init setup_arch(char **cmdline_p)
 	setup_bootmem();
 	paging_init();
 	unflatten_device_tree();
-#ifdef CONFIG_ARCH_RV64I
+#ifdef _LP64
 	swiotlb_init(1);
 #endif
 
