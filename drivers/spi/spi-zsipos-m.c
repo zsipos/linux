@@ -221,21 +221,15 @@ static unsigned zsipos_spim_write_read_dma(struct zsipos_spim *zsipos_spim, stru
 {
 	u8 control = LITEX_SPIM_CONTROL_START;
 
-	printk("len=%d\n", xfer->len);
-
 	zsipos_spim_enable_irq(zsipos_spim, true);
 
-	if (xfer->tx_dma) {
-		//dma_sync_single_for_device(zsipos_spim->master->dev.parent, xfer->tx_dma, xfer->len, DMA_TO_DEVICE);
+	if (xfer->tx_dma)
 		litex_csr_writel(xfer->tx_dma, zsipos_spim->csr_base + LITEX_SPIM_TXADR_REG);
-	}
 	else
 		control |= LITEX_SPIM_CONTROL_NOSND;
 
-	if (xfer->rx_dma) {
-		//dma_sync_single_for_device(zsipos_spim->master->dev.parent, xfer->rx_dma, xfer->len, DMA_FROM_DEVICE);
+	if (xfer->rx_dma)
 		litex_csr_writel(xfer->rx_dma, zsipos_spim->csr_base + LITEX_SPIM_RXADR_REG);
-	}
 	else
 		control |= LITEX_SPIM_CONTROL_NORCV;
 
@@ -245,13 +239,6 @@ static unsigned zsipos_spim_write_read_dma(struct zsipos_spim *zsipos_spim, stru
 	litex_csr_writeb(control, zsipos_spim->csr_base + LITEX_SPIM_CONTROL_REG);
 
 	wait_for_completion(&zsipos_spim->transferdone);
-
-//	if (xfer->tx_dma)
-//		dma_sync_single_for_cpu(zsipos_spim->master->dev.parent, xfer->tx_dma, xfer->len, DMA_TO_DEVICE);
-//	if (xfer->rx_dma)
-//		dma_sync_single_for_cpu(zsipos_spim->master->dev.parent, xfer->rx_dma, xfer->len, DMA_FROM_DEVICE);
-
-	printk("done\n");
 
 	return xfer->len;
 }
