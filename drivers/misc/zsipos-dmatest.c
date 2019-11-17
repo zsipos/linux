@@ -10,18 +10,11 @@
  * published by the Free Software Foundation.
  */
 
-#include <linux/clk.h>
-#include <linux/delay.h>
 #include <linux/dma-mapping.h>
-#include <linux/dmaengine.h>
-#include <linux/err.h>
-#include <linux/init.h>
-#include <linux/interrupt.h>
-#include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
-#include <linux/spi/spi.h>
+
 #include <soc/litex/litex.h>
 
 #define DRIVER_NAME "zsipos_dmatest"
@@ -37,52 +30,29 @@
  * NEVER INCLUDE IN A PROUCTION KERNEL!
  */
 
-#define BIOSADR 0x10000000
 #define SRAMADR 0x11000000
-#define BBLADR  0x80000000
-#define IOMADR  0x41000000 // abuse spim buffer
-#define IOMLEN  0x1000
+#define SRAMLEN 0x8000
+#define TSTLEN  8192
 
-static void read_test(u32 srcadr, u32 len, void __iomem *csr_base, u8 __iomem *iomem)
+static void dma_copy(void __iomem *csr_base, u32 srcadr, u32 dstadr, int len)
 {
-	int i = 0;
+	int n = 0;
 
-	printk("DMA TEST ADR: %x\n", srcadr);
+	printk("DMA COPY %x --> %x, %d", srcadr, dstadr, len);
 	litex_csr_writel(len, csr_base+LITEX_DMATEST_LENGTH_REG);
 	litex_csr_writel(srcadr, csr_base+LITEX_DMATEST_TXADR_REG);
-	litex_csr_writel(IOMADR, csr_base+LITEX_DMATEST_RXADR_REG);
-	litex_csr_writeb(1, csr_base+LITEX_DMATEST_CONTROL_REG);
-	while(litex_csr_readb(csr_base+LITEX_DMATEST_STATUS_REG))
-		i++;
-	printk("wait loops = %d\n", i);
-	if (len > 8) len = 8;
-	for(i = 0; i < len; i++) {
-		printk("%d:%02x\n", i, iomem[i]);
-		iomem[i] = 0;
-	}
-}
-
-static void write_test(u32 dstadr, int len, void __iomem *csr_base, u8 __iomem *iomem, u8 pattern)
-{
-	int i;
-
-	for(i = 0; i < len; i++)
-		iomem[i] = pattern + i;
-	litex_csr_writel(len, csr_base+LITEX_DMATEST_LENGTH_REG);
-	litex_csr_writel(IOMADR, csr_base+LITEX_DMATEST_TXADR_REG);
 	litex_csr_writel(dstadr, csr_base+LITEX_DMATEST_RXADR_REG);
 	litex_csr_writeb(1, csr_base+LITEX_DMATEST_CONTROL_REG);
 	while(litex_csr_readb(csr_base+LITEX_DMATEST_STATUS_REG))
-		i++;
-	for(i = 0; i < len; i++)
-		iomem[i] = 0;
-	flush_tlb_all();
+		n++;
 }
 
 static int zsipos_dmatest_probe(struct platform_device *pdev)
 {
 	void __iomem *csr_base;
-	void __iomem *mem_base;
+	void __iomem *sram_base;
+	void __iomem *dma_base;
+	dma_addr_t    dma_addr;
 	struct resource *r;
 	int status = 0;
 
@@ -103,24 +73,49 @@ static int zsipos_dmatest_probe(struct platform_device *pdev)
 		goto out;
 	}
 
-	if (!devm_request_mem_region(&pdev->dev, IOMADR, IOMLEN, dev_name(&pdev->dev))) {
+	if (!devm_request_mem_region(&pdev->dev, SRAMADR, SRAMLEN, dev_name(&pdev->dev))) {
 		status = -EBUSY;
 		goto out;
 	}
-	mem_base = devm_ioremap_nocache(&pdev->dev, IOMADR, IOMLEN);
-	if (IS_ERR(mem_base)) {
-		status = PTR_ERR(mem_base);
+	sram_base = devm_ioremap_nocache(&pdev->dev, SRAMADR, SRAMLEN);
+	if (IS_ERR(sram_base)) {
+		status = PTR_ERR(sram_base);
 		goto out;
 	}
 
-	printk("ZSIPOS DMA TEST\n");
+	dma_base = dma_alloc_coherent(&pdev->dev, TSTLEN, &dma_addr, GFP_KERNEL);
 
-	read_test(BBLADR, 1024, csr_base, mem_base);
-	read_test(BIOSADR, 1024, csr_base, mem_base);
-	write_test(BBLADR+(1<<25), 1024, csr_base, mem_base, 0x80);
-	write_test(SRAMADR, 1024, csr_base, mem_base, 0x10);
-	read_test(BBLADR+(1<<25), 1024, csr_base, mem_base);
-	read_test(SRAMADR, 1024, csr_base, mem_base);
+	printk("\nZSIPOS DMA TEST\n");
+
+	printk("test-1: copy IOMEM to IOMEM");
+	strcpy(sram_base, "1-Hello World!");
+	printk("write=%s\n", (char*)sram_base);
+	dma_copy(csr_base, SRAMADR, SRAMADR+1024, 32);
+	strcpy(sram_base, "1-Bad Copy-1");
+	dma_copy(csr_base, SRAMADR+1024, SRAMADR, 32);
+	printk("read=%s\n\n", (char*)sram_base);
+
+	printk("test-2: copy IOMEM to DMA to IOMEM");
+	strcpy(sram_base, "2-Hello World!");
+	printk("write=%s\n", (char*)sram_base);
+	dma_copy(csr_base, SRAMADR, dma_addr, TSTLEN);
+	strcpy(sram_base, "2-Bad Copy-3");
+	dma_copy(csr_base, dma_addr, SRAMADR, TSTLEN);
+	printk("read=%s\n\n", (char*)sram_base);
+
+	printk("test-3: copy IOMEM to DMA");
+	strcpy(sram_base, "3-Hello World!");
+	printk("write=%s\n", (char*)sram_base);
+	strcpy(dma_base, "3-Bad Copy-3");
+	dma_copy(csr_base, SRAMADR, dma_addr, TSTLEN);
+	printk("read=%s\n\n", (char*)dma_base);
+
+	printk("test-4: copy DMA to IOMEM");
+	strcpy(dma_base, "4-Hello, World!");
+	printk("write=%s\n", (char*)dma_base);
+	strcpy(sram_base, "4-Bad Copy-4");
+	dma_copy(csr_base, dma_addr, SRAMADR, TSTLEN);
+	printk("read=%s\n\n", (char*)sram_base);
 
 out:
 	return status;
