@@ -217,30 +217,36 @@ static unsigned zsipos_spim_write_read(struct zsipos_spim *zsipos_spim, struct s
 	return xfer->len;
 }
 
-static unsigned zsipos_spim_write_read_dma(struct zsipos_spim *zsipos_spim, struct spi_transfer *xfer)
+static unsigned zsipos_spim_xfer_dma(struct zsipos_spim *zsipos_spim, dma_addr_t tx, dma_addr_t rx, int len)
 {
 	u8 control = LITEX_SPIM_CONTROL_START;
 
 	zsipos_spim_enable_irq(zsipos_spim, true);
 
-	if (xfer->tx_dma)
-		litex_csr_writel(xfer->tx_dma, zsipos_spim->csr_base + LITEX_SPIM_TXADR_REG);
+	if (tx)
+		litex_csr_writel(tx, zsipos_spim->csr_base + LITEX_SPIM_TXADR_REG);
 	else
 		control |= LITEX_SPIM_CONTROL_NOSND;
 
-	if (xfer->rx_dma)
-		litex_csr_writel(xfer->rx_dma, zsipos_spim->csr_base + LITEX_SPIM_RXADR_REG);
+	if (rx)
+		litex_csr_writel(rx, zsipos_spim->csr_base + LITEX_SPIM_RXADR_REG);
 	else
 		control |= LITEX_SPIM_CONTROL_NORCV;
 
 	reinit_completion(&zsipos_spim->transferdone);
 
-	litex_csr_writew(xfer->len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
+	litex_csr_writew(len, zsipos_spim->csr_base + LITEX_SPIM_LENGTH_REG);
 	litex_csr_writeb(control, zsipos_spim->csr_base + LITEX_SPIM_CONTROL_REG);
 
 	wait_for_completion(&zsipos_spim->transferdone);
 
-	return xfer->len;
+	return len;
+
+}
+
+static unsigned zsipos_spim_write_read_dma(struct zsipos_spim *zsipos_spim, struct spi_transfer *xfer)
+{
+	return zsipos_spim_xfer_dma(zsipos_spim, xfer->tx_dma, xfer->rx_dma, xfer->len);
 }
 
 static bool zsipos_spim_can_dma(struct spi_master *master, struct spi_device *spi,
