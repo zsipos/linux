@@ -10,6 +10,7 @@
  * Written by Marek Czerski <ma.czerski@gmail.com>
  */
 
+#include <linux/clk.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/platform_device.h>
@@ -72,9 +73,10 @@ struct ocsdc_dev {
 	int irq_cmd;
 	int irq_data;
 	unsigned int clk_freq;
+	struct clk *clk;
 	struct mmc_request *curr_mrq;
 	struct mmc_command *curr_cmd;
-	struct mmc_data * curr_data;
+	struct mmc_data *curr_data;
 };
 
 static inline uint32_t ocsdc_read(struct ocsdc_dev * dev, int offset)
@@ -415,7 +417,15 @@ static int __init ocsdc_probe(struct platform_device *pdev)
 		return -ENOMEM;
 
 	dev = mmc_priv(mmc);
-	dev->clk_freq = 50000000;
+
+	dev->clk = devm_clk_get(&pdev->dev, NULL);
+	if (IS_ERR(dev->clk)) {
+		dev_err(&pdev->dev, "Unable to find bus clock\n");
+		res = PTR_ERR(dev->clk);
+		goto ERROR;
+	}
+
+	dev->clk_freq = clk_get_rate(dev->clk);
 
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res) {
@@ -466,7 +476,7 @@ static int __init ocsdc_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, mmc);
 
-	//printk("ocsdc_probe\n");
+	dev_info(&pdev->dev, "ocsdc loaded");
 
 	return 0;
 
