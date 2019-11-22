@@ -206,8 +206,12 @@ static void zsipos_spim_xfer_chunk(struct zsipos_spim *zsipos_spim, const u8 *tx
 			if (txdata) txdata += memsize;
 			if (rxdata) rxdata += memsize;
 		}
-		if (r)
-			zsipos_spim_xfer_mem(zsipos_spim, txdata, rxdata, r);
+		if (r) {
+			if (r < LITEX_SPIM_USE_IRQ_THRESHOLD)
+				zsipos_spim_xfer_mini(zsipos_spim, txdata, rxdata, r);
+			else
+				zsipos_spim_xfer_mem(zsipos_spim, txdata, rxdata, r);
+		}
 	}
 }
 
