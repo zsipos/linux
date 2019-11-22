@@ -26,7 +26,7 @@
 #include <soc/litex/litex.h>
 
 #define DRIVER_NAME					"zsipos_spi"
-#define FIFOSIZE 					256
+#define FIFOSIZE 					1024
 #define MINIRQ						2
 
 #define ZSIPOS_SPI_NUM_CHIPSELECTS	8
@@ -70,11 +70,15 @@ struct zsipos_spi {
 	unsigned int		last_bpw;
 };
 
-static u8 zsipos_spi_read(struct zsipos_spi* zsipos_spi, unsigned int reg) {
+static u8 zsipos_spi_read8(struct zsipos_spi* zsipos_spi, unsigned int reg) {
 	return readl(zsipos_spi->base + reg);
 }
 
-static void zsipos_spi_write(struct zsipos_spi* zsipos_spi, unsigned int reg, u8 value) {
+static void zsipos_spi_write8(struct zsipos_spi* zsipos_spi, unsigned int reg, u8 value) {
+	writel(value, zsipos_spi->base + reg);
+}
+
+static void zsipos_spi_write16(struct zsipos_spi* zsipos_spi, unsigned int reg, u16 value) {
 	writel(value, zsipos_spi->base + reg);
 }
 
@@ -154,14 +158,14 @@ static int zsipos_spi_setup_transfer(struct spi_device *spi, struct spi_transfer
 	zsipos_spi->last_mode  = spi->mode;
 	zsipos_spi->last_bpw   = bits_per_word;
 
-	spcr = zsipos_spi_read(zsipos_spi, ZSIPOS_SPI_REG_SPCR);
-	sper = zsipos_spi_read(zsipos_spi, ZSIPOS_SPI_REG_SPER);
+	spcr = zsipos_spi_read8(zsipos_spi, ZSIPOS_SPI_REG_SPCR);
+	sper = zsipos_spi_read8(zsipos_spi, ZSIPOS_SPI_REG_SPER);
 
 	zsipos_spi_set_baudrate_bits(&spcr, &sper, speed, clk_get_rate(zsipos_spi->clk));
 	zsipos_spi_set_mode_bits(&spcr, spi->mode);
 
-	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SPCR, spcr);
-	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SPER, sper);
+	zsipos_spi_write8(zsipos_spi, ZSIPOS_SPI_REG_SPCR, spcr);
+	zsipos_spi_write8(zsipos_spi, ZSIPOS_SPI_REG_SPER, sper);
 
 	return zsipos_spi_set_transfer_size(zsipos_spi, bits_per_word);
 }
@@ -170,7 +174,7 @@ static void zsipos_spi_set_cs(struct zsipos_spi *zsipos_spi, int mask)
 {
 	if (zsipos_spi->last_mode & SPI_CS_HIGH)
 		mask = ~mask;
-	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SSR, mask);
+	zsipos_spi_write8(zsipos_spi, ZSIPOS_SPI_REG_SSR, mask);
 }
 
 static irqreturn_t zsipos_spi_irq(int irq, void *dev_id)
@@ -193,7 +197,7 @@ static void zsipos_spi_xfer_chunk(struct zsipos_spi *zsipos_spi, const u8 *txdat
 	unsigned int i;
 
 	if (len >= MINIRQ) {
-		zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_ICNT, len-1);
+		zsipos_spi_write16(zsipos_spi, ZSIPOS_SPI_REG_ICNT, len-1);
 		reinit_completion(&zsipos_spi->transferdone);
 		if (txdata)
 			for (i = len; i; i--)
@@ -205,11 +209,13 @@ static void zsipos_spi_xfer_chunk(struct zsipos_spi *zsipos_spi, const u8 *txdat
 		if (rxdata)
 			for (i = len; i; i--)
 				*rxdata++ = readl(datareg);
+#if 0
 		else
 			for (i = len; i; i--)
 				readl(datareg);
+#endif
 	} else {
-		zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_ICNT, FIFOSIZE-1);
+		zsipos_spi_write16(zsipos_spi, ZSIPOS_SPI_REG_ICNT, FIFOSIZE-1);
 		if (txdata)
 			for (i = len; i; i--)
 				writel(*txdata++, datareg);
@@ -222,16 +228,18 @@ static void zsipos_spi_xfer_chunk(struct zsipos_spi *zsipos_spi, const u8 *txdat
 					cond_resched();
 				*rxdata++ = readl(datareg);
 			}
+#if 0
 		else
 			for (i = len; i; i--) {
 				while (readl(statreg) & ZSIPOS_SPI_SPSR_RFEMPTY)
 					cond_resched();
 				readl(datareg);
 			}
+#endif
 	}
 
-	if (!(readl(statreg) & ZSIPOS_SPI_SPSR_RFEMPTY))
-		printk("fifo not empty: len=%d, tx=%d, rx=%d\n", len, txdata != 0, rxdata != 0);
+	//if (!(readl(statreg) & ZSIPOS_SPI_SPSR_RFEMPTY))
+	//	printk("fifo not empty: len=%d, tx=%d, rx=%d\n", len, txdata != 0, rxdata != 0);
 }
 
 static void zsipos_spi_xfer_fifo(struct zsipos_spi *zsipos_spi, const u8 *txdata, u8 *rxdata, unsigned len)
@@ -345,11 +353,11 @@ static int zsipos_spi_reset(struct zsipos_spi *zsipos_spi)
 	zsipos_spi_set_cs(zsipos_spi, 0);
 
 	/* Disable controller */
-	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SPCR, ZSIPOS_SPI_SPCR_MSTR);
+	zsipos_spi_write8(zsipos_spi, ZSIPOS_SPI_REG_SPCR, ZSIPOS_SPI_SPCR_MSTR);
 	/* Enable controller */
-	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SPCR, ZSIPOS_SPI_SPCR_MSTR | ZSIPOS_SPI_SPCR_SPEN | ZSIPOS_SPI_SPCR_SPIE);
+	zsipos_spi_write8(zsipos_spi, ZSIPOS_SPI_REG_SPCR, ZSIPOS_SPI_SPCR_MSTR | ZSIPOS_SPI_SPCR_SPEN | ZSIPOS_SPI_SPCR_SPIE);
 	/* clear interrupt flag */
-	zsipos_spi_write(zsipos_spi, ZSIPOS_SPI_REG_SPSR, ZSIPOS_SPI_SPSR_SPIF);
+	zsipos_spi_write8(zsipos_spi, ZSIPOS_SPI_REG_SPSR, ZSIPOS_SPI_SPSR_SPIF);
 
 	return 0;
 }
