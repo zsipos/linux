@@ -749,12 +749,6 @@ config SPI_ZSIPOS
 	help
 	  Enables ZSIPOS SPI controller driver for ZSIPOS SoC.
 
-config SPI_ZSIPOS_M
-	tristate "ZSIPOS SPI-M controller"
-	depends on SPI_MASTER
-	help
-	  Enables ZSIPOS SPI-M controller driver for ZSIPOS SoC.
-
 config SPI_ZYNQMP_GQSPI
 	tristate "Xilinx ZynqMP GQSPI controller"
 	depends on SPI_MASTER && HAS_DMA

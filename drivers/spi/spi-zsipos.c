@@ -82,16 +82,6 @@ static void zsipos_spi_write16(struct zsipos_spi* zsipos_spi, unsigned int reg, 
 	writel(value, zsipos_spi->base + reg);
 }
 
-static int zsipos_spi_set_transfer_size(struct zsipos_spi *zsipos_spi, unsigned int size)
-{
-	if (size != 8) {
-		printk("Bad transfer size: %d\n", size);
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
 static void zsipos_spi_set_baudrate_bits(u8* spcr, u8* sper,
 		unsigned int speed, unsigned int clock_frequency)
 {
@@ -137,26 +127,20 @@ static int zsipos_spi_setup_transfer(struct spi_device *spi, struct spi_transfer
 {
 	struct zsipos_spi *zsipos_spi;
 	unsigned int speed;
-	unsigned int bits_per_word;
 	u8 spcr, sper;
 
 	zsipos_spi = spi_master_get_devdata(spi->master);
 
-	if (t) {
+	if (t)
 		speed = t->speed_hz ? t->speed_hz : spi->max_speed_hz;
-		bits_per_word = t->bits_per_word ? t->bits_per_word : spi->bits_per_word;
-	} else {
+	else
 		speed = spi->max_speed_hz;
-		bits_per_word = spi->bits_per_word;
-	}
 
-	if (speed == zsipos_spi->last_speed && spi->mode == zsipos_spi->last_mode
-			&& bits_per_word == zsipos_spi->last_bpw)
+	if (speed == zsipos_spi->last_speed && spi->mode == zsipos_spi->last_mode)
 		return 0; /* nothing changed */
 
 	zsipos_spi->last_speed = speed;
 	zsipos_spi->last_mode  = spi->mode;
-	zsipos_spi->last_bpw   = bits_per_word;
 
 	spcr = zsipos_spi_read8(zsipos_spi, ZSIPOS_SPI_REG_SPCR);
 	sper = zsipos_spi_read8(zsipos_spi, ZSIPOS_SPI_REG_SPER);
@@ -167,7 +151,7 @@ static int zsipos_spi_setup_transfer(struct spi_device *spi, struct spi_transfer
 	zsipos_spi_write8(zsipos_spi, ZSIPOS_SPI_REG_SPCR, spcr);
 	zsipos_spi_write8(zsipos_spi, ZSIPOS_SPI_REG_SPER, sper);
 
-	return zsipos_spi_set_transfer_size(zsipos_spi, bits_per_word);
+	return 0;
 }
 
 static void zsipos_spi_set_cs(struct zsipos_spi *zsipos_spi, int mask)
@@ -266,18 +250,16 @@ static int zsipos_spi_transfer_one_message(struct spi_master *master, struct spi
 	struct zsipos_spi *zsipos_spi = spi_master_get_devdata(master);
 	struct spi_device *spi = m->spi;
 	struct spi_transfer *t = NULL;
-	int par_override = 0;
 	int status = 0;
 	int cs_active = 0;
-
-	/* Load defaults */
-	status = zsipos_spi_setup_transfer(spi, NULL);
 
 	if (status < 0)
 		goto msg_done;
 
 	list_for_each_entry(t, &m->transfers, transfer_list) {
-		unsigned int bits_per_word = spi->bits_per_word;
+		status = zsipos_spi_setup_transfer(spi, NULL);
+		if (status < 0)
+			goto msg_done;
 
 		if (t->tx_buf == NULL && t->rx_buf == NULL && t->len) {
 			dev_err(&spi->dev,
@@ -285,37 +267,6 @@ static int zsipos_spi_transfer_one_message(struct spi_master *master, struct spi
 					"invalid transfer data buffers\n");
 			status = -EIO;
 			goto msg_done;
-		}
-
-		if ((t != NULL) && t->bits_per_word)
-			bits_per_word = t->bits_per_word;
-
-		if ((bits_per_word != 8)) {
-			dev_err(&spi->dev,
-					"message rejected : "
-					"invalid transfer bits_per_word (%d bits)\n",
-					bits_per_word);
-			status = -EIO;
-			goto msg_done;
-		}
-
-		if (t->speed_hz && t->speed_hz < zsipos_spi->min_speed) {
-			dev_err(&spi->dev,
-					"message rejected : "
-					"device min speed (%d Hz) exceeds "
-					"required transfer speed (%d Hz)\n",
-					zsipos_spi->min_speed, t->speed_hz);
-			status = -EIO;
-			goto msg_done;
-		}
-
-		if (par_override || t->speed_hz || t->bits_per_word) {
-			par_override = 1;
-			status = zsipos_spi_setup_transfer(spi, t);
-			if (status < 0)
-				break;
-			if (!t->speed_hz && !t->bits_per_word)
-				par_override = 0;
 		}
 
 		if (!cs_active) {
@@ -333,7 +284,6 @@ static int zsipos_spi_transfer_one_message(struct spi_master *master, struct spi
 			zsipos_spi_set_cs(zsipos_spi, 0);
 			cs_active = 0;
 		}
-
 	}
 
 msg_done:
@@ -408,6 +358,7 @@ static int zsipos_spi_probe(struct platform_device *pdev)
 	master->bus_num = -1;
 
 	master->mode_bits = SPI_CPHA | SPI_CPOL | SPI_CS_HIGH;
+	master->bits_per_word_mask = SPI_BPW_MASK(8);
 
 	master->setup = zsipos_spi_setup;
 	master->transfer_one_message = zsipos_spi_transfer_one_message;
