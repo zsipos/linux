@@ -193,11 +193,9 @@ static void zsipos_spi_xfer_chunk(struct zsipos_spi *zsipos_spi, const u8 *txdat
 		if (rxdata)
 			for (i = len; i; i--)
 				*rxdata++ = readl(datareg);
-#if 0
 		else
 			for (i = len; i; i--)
 				readl(datareg);
-#endif
 	} else {
 		zsipos_spi_write16(zsipos_spi, ZSIPOS_SPI_REG_ICNT, FIFOSIZE-1);
 		if (txdata)
@@ -212,14 +210,12 @@ static void zsipos_spi_xfer_chunk(struct zsipos_spi *zsipos_spi, const u8 *txdat
 					cond_resched();
 				*rxdata++ = readl(datareg);
 			}
-#if 0
 		else
 			for (i = len; i; i--) {
 				while (readl(statreg) & ZSIPOS_SPI_SPSR_RFEMPTY)
 					cond_resched();
 				readl(datareg);
 			}
-#endif
 	}
 
 	//if (!(readl(statreg) & ZSIPOS_SPI_SPSR_RFEMPTY))
