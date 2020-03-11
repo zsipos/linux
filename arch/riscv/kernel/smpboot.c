@@ -50,11 +50,17 @@ void __init smp_prepare_cpus(unsigned int max_cpus)
 void __init setup_smp(void)
 {
 	struct device_node *dn = NULL;
-	int hart, im_okay_therefore_i_am = 0;
+	int hart = 0, im_okay_therefore_i_am = 0;
 
 	while ((dn = of_find_node_by_type(dn, "cpu"))) {
 		hart = riscv_of_processor_hart(dn);
 		if (hart >= 0) {
+			if (hart == 0) {
+				printk("hart 0 reserved by sel4\n");
+				set_cpu_possible(hart, false);
+				set_cpu_present(hart, false);
+				continue;
+			}
 			set_cpu_possible(hart, true);
 			set_cpu_present(hart, true);
 			if (hart == smp_processor_id()) {

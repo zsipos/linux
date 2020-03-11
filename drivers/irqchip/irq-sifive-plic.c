@@ -234,6 +234,10 @@ static int __init plic_init(struct device_node *node,
 			pr_warn("failed to parse hart ID for context %d.\n", i);
 			continue;
 		}
+		if (cpu == 0) {
+			pr_info("hartid 0 reserved by sel4.");
+			continue;
+		}
 
 		handler = per_cpu_ptr(&plic_handlers, cpu);
 		handler->present = true;
