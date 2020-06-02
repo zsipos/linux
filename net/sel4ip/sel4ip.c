@@ -11,12 +11,14 @@ static u8 __iomem volatile *bmem;
 
 static int count = 0;
 
+#define S 0
+
 static irqreturn_t master_irq(int irq, void *dev_id)
 {
+	*smem = 0;
 	printk("master irq\n", *mmem);
 	printk("data = %s\n", bmem);
-	*smem = 0;
-	if (count < 10) {
+	if (count < 1) {
 		printk("call again\n");
 		count++;
 		*mmem = 1;
@@ -24,18 +26,22 @@ static irqreturn_t master_irq(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+#if S
 static irqreturn_t slave_irq(int irq, void *dev_id)
 {
-	printk("slave irq\n");
 	*mmem = 0;
+	printk("slave irq\n");
+	printk("data = %s\n", bmem);
+	strcpy(bmem, "Hello, Linux!\n");
 	*smem = 1;
 	return IRQ_HANDLED;
 }
+#endif
 
 int __init sel4ip_init(void) {
 	struct device_node *mn, *sn;
 	struct resource memm_res, mems_res, memb_res;
-	int irqm, irqs;
+	int irqm = -1, irqs = -1;
 	int rc;
 
 	mn = of_find_node_by_path("/soc/to_sel4_master@0");
@@ -50,13 +56,19 @@ int __init sel4ip_init(void) {
 	bmem = ioremap_nocache(memb_res.start, resource_size(&memb_res));
 
 	irqm = irq_of_parse_and_map(mn, 0);
-	//irqs = irq_of_parse_and_map(sn, 0);
+#if S
+	irqs = irq_of_parse_and_map(sn, 0);
+#endif
 
 	rc = request_irq(irqm, master_irq, 0, "irqm", mmem);
-	//rc = request_irq(irqs, slave_irq, 0, "irqs", smem);
+#if S
+	rc = request_irq(irqs, slave_irq, 0, "irqs", smem);
+#endif
 
 	strcpy(bmem, "Hello, SEL4!");
 	*mmem = 1;
+
+	while(*mmem);
 
 	printk("NET: sel4ip initialized\n");
 	return 0;
