@@ -1,3 +1,3 @@
 
-obj-y := sel4ip.o
+obj-y := sel4ip.o iprcchan.o
 

@@ -1,76 +1,25 @@
-#include <linux/interrupt.h>
-#include <linux/types.h>
 #include <linux/of.h>
-#include <linux/of_address.h>
-#include <linux/of_irq.h>
+#include <linux/types.h>
 #include <linux/socket.h>
 
-static u8 __iomem volatile *mmem;
-static u8 __iomem volatile *smem;
-static u8 __iomem volatile *bmem;
-
-static int count = 0;
-
-#define S 0
-
-static irqreturn_t master_irq(int irq, void *dev_id)
-{
-	*smem = 0;
-	printk("master irq\n", *mmem);
-	printk("data = %s\n", bmem);
-	if (count < 1) {
-		printk("call again\n");
-		count++;
-		*mmem = 1;
-	}
-	return IRQ_HANDLED;
-}
-
-#if S
-static irqreturn_t slave_irq(int irq, void *dev_id)
-{
-	*mmem = 0;
-	printk("slave irq\n");
-	printk("data = %s\n", bmem);
-	strcpy(bmem, "Hello, Linux!\n");
-	*smem = 1;
-	return IRQ_HANDLED;
-}
-#endif
+#include "iprcchan.h"
 
 int __init sel4ip_init(void) {
-	struct device_node *mn, *sn;
-	struct resource memm_res, mems_res, memb_res;
-	int irqm = -1, irqs = -1;
-	int rc;
+	struct iprcchan *chan;
+	void *buf;
 
-	mn = of_find_node_by_path("/soc/to_sel4_master@0");
-	sn = of_find_node_by_path("/soc/to_sel4_slave@0");
+	printk("NET: sel4ip initialize\n");
 
-	rc = of_address_to_resource(mn, 0, &memm_res);
-	rc = of_address_to_resource(mn, 1, &mems_res);
-	rc = of_address_to_resource(mn, 2, &memb_res);
+	chan = iprcchan_open(0, NULL, NULL);
 
-	mmem = ioremap_nocache(memm_res.start, resource_size(&memm_res));
-	smem = ioremap_nocache(mems_res.start, resource_size(&mems_res));
-	bmem = ioremap_nocache(memb_res.start, resource_size(&memb_res));
+	buf = iprcchan_begin_call(chan);
+	strcpy(buf, "Hello, SEL4!\n");
+	iprcchan_do_call(chan);
+	printk("result: %s\n", buf);
+	iprcchan_end_call(chan);
 
-	irqm = irq_of_parse_and_map(mn, 0);
-#if S
-	irqs = irq_of_parse_and_map(sn, 0);
-#endif
+	printk("NET: sel4ip initialize done\n");
 
-	rc = request_irq(irqm, master_irq, 0, "irqm", mmem);
-#if S
-	rc = request_irq(irqs, slave_irq, 0, "irqs", smem);
-#endif
-
-	strcpy(bmem, "Hello, SEL4!");
-	*mmem = 1;
-
-	while(*mmem);
-
-	printk("NET: sel4ip initialized\n");
 	return 0;
 }
 
