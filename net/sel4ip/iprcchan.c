@@ -156,7 +156,7 @@ void iprcchan_close(struct iprcchan *chan)
 	/* free master resources */
 
 	if (chan->m_confirm_irq)
-		free_irq(chan->m_confirm_irq, NULL);
+		free_irq(chan->m_confirm_irq, chan);
 	if (chan->m_request_reg)
 		iounmap(chan->m_request_reg);
 	if (chan->m_confirm_reg)
@@ -167,13 +167,15 @@ void iprcchan_close(struct iprcchan *chan)
 	/* free slave resources */
 
 	if (chan->s_request_irq)
-		free_irq(chan->s_request_irq, NULL);
+		free_irq(chan->s_request_irq, chan);
 	if (chan->s_request_reg)
 		iounmap(chan->s_request_reg);
 	if (chan->s_confirm_reg)
 		iounmap(chan->s_confirm_reg);
 	if (chan->s_buffer)
 		iounmap(chan->s_buffer);
+
+	mutex_destroy(&chan->m_lock);
 
 	kfree(chan);
 }
