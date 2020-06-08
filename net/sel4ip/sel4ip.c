@@ -4,7 +4,8 @@
 
 #include "iprcchan.h"
 
-int __init sel4ip_init(void) {
+static void iprcchan_test(void)
+{
 	struct iprcchan *chan;
 	void *buf;
 
@@ -13,13 +14,19 @@ int __init sel4ip_init(void) {
 	chan = iprcchan_open(0, NULL, NULL);
 
 	buf = iprcchan_begin_call(chan);
-	strcpy(buf, "Hello, SEL4!\n");
+	strcpy((char*)buf, "Hello, SEL4!\n");
 	iprcchan_do_call(chan);
-	printk("result: %s\n", buf);
+	printk("result: %s\n", (char*)buf);
 	iprcchan_end_call(chan);
 
-	printk("NET: sel4ip initialize done\n");
+	iprcchan_close(chan);
 
+	printk("NET: sel4ip initialize done\n");
+}
+
+
+int __init sel4ip_init(void) {
+	iprcchan_test();
 	return 0;
 }
 
