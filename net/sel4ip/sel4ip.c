@@ -2,7 +2,11 @@
 #include <linux/types.h>
 #include <linux/socket.h>
 
+#include "picotcp.h"
 #include "iprcchan.h"
+#include "remcalls.h"
+
+extern int af_inet_picotcp_init(void);
 
 static void iprcchan_test(void)
 {
@@ -24,10 +28,9 @@ static void iprcchan_test(void)
 	printk("NET: sel4ip initialize done\n");
 }
 
-
-int __init sel4ip_init(void) {
-	iprcchan_test();
-	return 0;
+int __init sel4ip_init(void)
+{
+	return af_inet_picotcp_init();
 }
 
 fs_initcall(sel4ip_init);

@@ -7,7 +7,7 @@
 
 #include "iprcchan.h"
 
-struct iprcchan {
+typedef struct iprcchan {
 	// master
 	u8 __iomem        *m_request_reg;
 	u8 __iomem        *m_confirm_reg;
@@ -21,13 +21,13 @@ struct iprcchan {
 	u8 __iomem        *s_buffer;
 	int                s_request_irq;
 	// slave callback
-	void             (*cb_func)(void*, void*);
+	void             (*cb_func)(void *cb_data, void *buffer);
 	void              *cb_data;
-};
+} iprcchan_t;
 
 static irqreturn_t iprcchan_master_irq(int irq, void *devid)
 {
-	struct iprcchan *chan = devid;
+	iprcchan_t *chan = devid;
 
 	*chan->m_confirm_reg = 0;
 	complete(&chan->m_complete);
@@ -36,9 +36,16 @@ static irqreturn_t iprcchan_master_irq(int irq, void *devid)
 
 static irqreturn_t iprcchan_slave_irq(int irq, void *devid)
 {
-	struct iprcchan *chan = devid;
+	iprcchan_t *chan = devid;
 
-	*chan->m_request_reg = 0;
+	*chan->s_request_reg = 0;
+	return IRQ_WAKE_THREAD;
+}
+
+static irqreturn_t iprcchan_slave_irq_threaded(int irq, void *devid)
+{
+	iprcchan_t *chan = devid;
+
 	chan->cb_func(chan->cb_data, chan->s_buffer);
 	*chan->s_confirm_reg = 1;
 	return IRQ_HANDLED;
@@ -68,9 +75,9 @@ static void *get_and_map_reg(struct device_node *node, int offset)
 	return ioremap_nocache(resource.start, resource_size(&resource));
 }
 
-struct iprcchan *iprcchan_open(int num, void (*cb_func)(void*, void*), void *cb_data)
+iprcchan_t *iprcchan_open(int num, void (*cb_func)(void *cb_data, void *buffer), void *cb_data)
 {
-	struct iprcchan    *chan = NULL;
+	iprcchan_t    *chan = NULL;
 	struct device_node *master_node, *slave_node;
 
 	if (num > 0) {
@@ -87,7 +94,7 @@ struct iprcchan *iprcchan_open(int num, void (*cb_func)(void*, void*), void *cb_
 		return NULL;
 	}
 
-	chan = kmalloc(sizeof(struct iprcchan), GFP_KERNEL);
+	chan = kmalloc(sizeof(iprcchan_t), GFP_KERNEL);
 	if (!chan)
 		goto error;
 	memset(chan, 0, sizeof(*chan));
@@ -135,7 +142,7 @@ struct iprcchan *iprcchan_open(int num, void (*cb_func)(void*, void*), void *cb_
 		goto error;
 	}
 
-	if(request_irq(chan->s_request_irq, iprcchan_slave_irq, 0, "iprcchans", chan)) {
+	if(request_threaded_irq(chan->s_request_irq, iprcchan_slave_irq, iprcchan_slave_irq_threaded, 0, "iprcchans", chan)) {
 		printk(KERN_ERR "can not map slave irq\n");
 		goto error;
 	}
@@ -148,7 +155,7 @@ error:
 	return NULL;
 }
 
-void iprcchan_close(struct iprcchan *chan)
+void iprcchan_close(iprcchan_t *chan)
 {
 	if (!chan)
 		return;
@@ -180,20 +187,20 @@ void iprcchan_close(struct iprcchan *chan)
 	kfree(chan);
 }
 
-void *iprcchan_begin_call(struct iprcchan *chan)
+void *iprcchan_begin_call(iprcchan_t *chan)
 {
 	mutex_lock(&chan->m_lock);
 	return chan->m_buffer;
 }
 
-int iprcchan_do_call(struct iprcchan *chan)
+int iprcchan_do_call(iprcchan_t *chan)
 {
 	*chan->m_request_reg = 1;
 	wait_for_completion(&chan->m_complete);
 	return 0;
 }
 
-void iprcchan_end_call(struct iprcchan *chan)
+void iprcchan_end_call(iprcchan_t *chan)
 {
 	mutex_unlock(&chan->m_lock);
 }
