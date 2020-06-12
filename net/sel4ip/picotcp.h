@@ -8,6 +8,7 @@ Author: Andrei Carp, Maxime Vincent
 *********************************************************************/
 #include "pico_defines.h"
 #include <linux/types.h>
+#include "pico_addressing.h"
 #include "pico_constants.h"
 #include "pico_config.h"
 #include "pico_stack.h"

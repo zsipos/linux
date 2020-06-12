@@ -30,6 +30,47 @@ typedef struct rem_set_priv_arg {
 	void              *priv;
 } rem_set_priv_arg_t;
 
+/* ioctl helpers */
+
+#define MAX_DEVICES 10
+
+typedef char pico_dev_name_t[MAX_DEVICE_NAME];
+
+typedef struct pico_devices {
+	int             count;
+	pico_dev_name_t names[MAX_DEVICES];
+} pico_devices_t;
+
+typedef struct pico_device_config {
+	pico_dev_name_t    name;
+	int                hasipv4link;
+	union pico_address address;
+	union pico_address netmask;
+	uint32_t           mtu;
+	int                hasmac;
+	struct pico_eth    mac;
+} pico_device_config_t;
+
+extern int rem_get_devices(pico_devices_t *devices);
+
+typedef struct rem_get_devices_res {
+	int            retval;
+	pico_devices_t devices;
+} rem_get_devices_res_t;
+
+extern int rem_get_device_config(const char *name, pico_device_config_t *conf);
+
+typedef struct rem_get_device_config_arg {
+	pico_dev_name_t name;
+} rem_get_device_config_arg_t;
+
+typedef struct rem_get_device_config_res {
+	int                  retval;
+	pico_device_config_t config;
+} rem_get_device_config_res_t;
+
+/* socket functions */
+
 extern int rem_pico_socket_shutdown(rem_pico_socket_t *s, int mode);
 
 typedef struct rem_pico_socket_shutdown_arg {
@@ -198,6 +239,8 @@ typedef enum rem_functions {
 	f_rem_stack_unlock,
 	f_rem_get_proto,
 	f_rem_set_priv,
+	f_rem_get_devices,
+	f_rem_get_device_config,
 	f_rem_pico_socket_shutdown,
 	f_rem_pico_socket_connect,
 	f_rem_pico_socket_close,
@@ -227,6 +270,7 @@ typedef struct rem_arg {
 	union {
 		rem_get_proto_arg_t             rem_get_proto_arg;
 		rem_set_priv_arg_t              rem_set_priv_arg;
+		rem_get_device_config_arg_t     rem_get_device_config_arg;
 		rem_pico_socket_shutdown_arg_t  rem_pico_socket_shutdown_arg;
 		rem_pico_socket_connect_arg_t   rem_pico_socket_connect_arg;
 		rem_pico_socket_close_arg_t     rem_pico_socket_close_arg;
@@ -247,6 +291,8 @@ typedef struct rem_res {
 	rem_res_hdr_t hdr;
 	union {
 		rem_get_proto_res_t             rem_get_proto_res;
+		rem_get_devices_res_t           rem_get_devices_res;
+		rem_get_device_config_res_t     rem_get_device_config_res;
 		rem_pico_socket_shutdown_res_t  rem_pico_socket_shutdown_res;
 		rem_pico_socket_connect_res_t   rem_pico_socket_connect_res;
 		rem_pico_socket_close_res_t     rem_pico_socket_close_res;

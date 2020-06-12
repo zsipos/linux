@@ -99,6 +99,41 @@ void rem_set_priv(rem_pico_socket_t *s, void *priv)
 	iprcchan_end_call(chan);
 }
 
+int rem_get_devices(pico_devices_t *devices)
+{
+	rem_arg_t             *arg = iprcchan_begin_call(chan);
+	rem_res_t             *res = (rem_res_t*)arg;
+	rem_get_devices_res_t *r = &res->u.rem_get_devices_res;
+	int                    retval;
+
+	arg->hdr.func = f_rem_get_devices;
+	do_call(chan);
+	pico_err = res->hdr.pico_err;
+	retval   = r->retval;
+	*devices = r->devices;
+	iprcchan_end_call(chan);
+	return retval;
+}
+
+int rem_get_device_config(const char *name, pico_device_config_t *config)
+{
+	rem_arg_t                   *arg = iprcchan_begin_call(chan);
+	rem_res_t                   *res = (rem_res_t*)arg;
+	rem_get_device_config_arg_t *a = &arg->u.rem_get_device_config_arg;
+	rem_get_device_config_res_t *r = &res->u.rem_get_device_config_res;
+	int                          retval;
+
+	arg->hdr.func = f_rem_get_device_config;
+	strncpy(a->name, name, sizeof(a->name)-1);
+	a->name[sizeof(a->name)-1] = 0;
+	do_call(chan);
+	pico_err = res->hdr.pico_err;
+	retval   = r->retval;
+	*config  = r->config;
+	iprcchan_end_call(chan);
+	return retval;
+}
+
 int rem_pico_socket_shutdown(rem_pico_socket_t *s, int mode)
 {
 	rem_arg_t                      *arg = iprcchan_begin_call(chan);
@@ -335,13 +370,13 @@ int rem_pico_socket_getoption(rem_pico_socket_t *s, int option, void *value, int
 	else if (*optlen < 0)
 		*optlen = 0;
 	arg->hdr.func = f_rem_pico_socket_getoption;
-	a->s          = s;
-	a->option     = option;
-	a->optlen     = *optlen;
+	a->s      = s;
+	a->option = option;
+	a->optlen = *optlen;
 	do_call(chan);
-	pico_err    = res->hdr.pico_err;
-	retval      = r->retval;
-	*optlen     = r->optlen;
+	pico_err = res->hdr.pico_err;
+	retval   = r->retval;
+	*optlen  = r->optlen;
 	if (retval > 0)
 		memcpy(value, &r->value[0], *optlen);
 	iprcchan_end_call(chan);
@@ -361,13 +396,13 @@ int rem_pico_socket_setoption(rem_pico_socket_t *s, int option, void *value, int
 	else if (optlen < 0)
 		optlen = 0;
 	arg->hdr.func = f_rem_pico_socket_setoption;
-	a->s          = s;
-	a->option     = option;
-	a->optlen     = optlen;
+	a->s      = s;
+	a->option = option;
+	a->optlen = optlen;
 	memcpy(&a->value[0], value, optlen);
 	do_call(chan);
-	pico_err    = res->hdr.pico_err;
-	retval      = r->retval;
+	pico_err = res->hdr.pico_err;
+	retval   = r->retval;
 	iprcchan_end_call(chan);
 	return retval;
 }
