@@ -5,7 +5,7 @@
 
 typedef struct rem_pico_socket rem_pico_socket_t;
 
-extern int rem_init(void);
+extern int rem_init(void (*eventfunc)(uint16_t ev, void *s, void *priv));
 
 extern void rem_deinit(void);
 
@@ -117,10 +117,11 @@ typedef struct rem_pico_socket_bind_res {
 	uint16_t port;
 } rem_pico_socket_bind_res_t;
 
-extern int rem_pico_socket_getname(rem_pico_socket_t *s, union pico_address *local_addr, uint16_t *port, uint16_t *proto);
+extern int rem_pico_socket_getname(rem_pico_socket_t *s, union pico_address *local_addr, uint16_t *port, uint16_t *proto, int peer);
 
 typedef struct rem_pico_socket_getname_arg {
 	rem_pico_socket_t  *s;
+	int                 peer;
 } rem_pico_socket_getname_arg_t;
 
 typedef struct rem_pico_socket_getname_res {
@@ -193,12 +194,11 @@ typedef struct rem_pico_socket_recvfrom_res {
 	char               buf[1];
 } rem_pico_socket_recvfrom_res_t;
 
-extern rem_pico_socket_t *rem_pico_socket_open(uint16_t net, uint16_t proto, void (*wakeup)(uint16_t ev, void *s, void *priv));
+extern rem_pico_socket_t *rem_pico_socket_open(uint16_t net, uint16_t proto);
 
 typedef struct rem_pico_socket_open_arg {
 	uint16_t   net;
 	uint16_t   proto;
-	void     (*wakeup)(uint16_t ev, void *s, void *priv);
 } rem_pico_socket_open_arg_t;
 
 typedef struct rem_pico_socket_open_res {
@@ -321,8 +321,7 @@ typedef struct remcb_arg_hdr {
 } remcb_arg_hdr_t;
 
 typedef struct remcb_pico_socket_event_arg {
-	void     (*wakeup)(uint16_t ev, void *s, void *priv);
-	uint16_t   evt;
+	uint16_t   ev;
 	void      *s;
 	void      *priv;
 } remcb_pico_socket_event_arg_t;

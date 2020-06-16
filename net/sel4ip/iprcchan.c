@@ -38,8 +38,11 @@ static irqreturn_t iprcchan_slave_irq(int irq, void *devid)
 {
 	iprcchan_t *chan = devid;
 
-	*chan->s_request_reg = 0;
-	return IRQ_WAKE_THREAD;
+	if (*chan->s_request_reg) {
+		*chan->s_request_reg = 0;
+		return IRQ_WAKE_THREAD;
+	}
+	return IRQ_NONE;
 }
 
 static irqreturn_t iprcchan_slave_irq_threaded(int irq, void *devid)

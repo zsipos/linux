@@ -7,11 +7,12 @@ volatile pico_err_t pico_err;
 
 static iprcchan_t *chan = NULL;
 
-static void handle_remcb_pico_socket_event(remcb_arg_t *arg)
+static void handle_remcb_pico_socket_event(void *cb_data, remcb_arg_t *arg)
 {
 	remcb_pico_socket_event_arg_t *a = &arg->u.remcb_pico_socket_event_arg;
+	void (*eventfunc)(uint16_t ev, void *s, void *priv) = cb_data;
 
-	a->wakeup(a->evt, a->s, a->priv);
+	eventfunc(a->ev, a->s, a->priv);
 }
 
 static void iprcchan_callback(void *cb_data, void *buffer)
@@ -20,7 +21,7 @@ static void iprcchan_callback(void *cb_data, void *buffer)
 
 	switch(arg->hdr.func) {
 	case f_remcb_pico_socket_event:
-		handle_remcb_pico_socket_event(arg);
+		handle_remcb_pico_socket_event(cb_data, arg);
 		break;
 	default:
 		printk("unknown remcb function %d\n", arg->hdr.func);
@@ -35,9 +36,9 @@ static void do_call(iprcchan_t *chan)
 		panic("iprc call failed!\n");
 }
 
-int rem_init(void)
+int rem_init(void (*eventfunc)(uint16_t ev, void *s, void *priv))
 {
-	chan = iprcchan_open(0, iprcchan_callback, NULL);
+	chan = iprcchan_open(0, iprcchan_callback, eventfunc);
 	if (!chan)
 		return -ENOMEM;
 	return 0;
@@ -207,7 +208,7 @@ int rem_pico_socket_bind(rem_pico_socket_t *s, union pico_address *local_addr, u
 	return retval;
 }
 
-int rem_pico_socket_getname(rem_pico_socket_t *s, union pico_address *local_addr, uint16_t *port, uint16_t *proto)
+int rem_pico_socket_getname(rem_pico_socket_t *s, union pico_address *local_addr, uint16_t *port, uint16_t *proto, int peer)
 {
 	rem_arg_t                     *arg = iprcchan_begin_call(chan);
 	rem_res_t                     *res = (rem_res_t*)arg;
@@ -217,6 +218,7 @@ int rem_pico_socket_getname(rem_pico_socket_t *s, union pico_address *local_addr
 
 	arg->hdr.func = f_rem_pico_socket_getname;
 	a->s          = s;
+	a->peer       = peer;
 	do_call(chan);
 	pico_err    = res->hdr.pico_err;
 	retval      = r->retval;
@@ -338,7 +340,7 @@ int rem_pico_socket_recvfrom(rem_pico_socket_t *s, void *buf, int len, union pic
 	return retval;
 }
 
-rem_pico_socket_t *rem_pico_socket_open(uint16_t net, uint16_t proto, void (*wakeup)(uint16_t ev, void *s, void *priv))
+rem_pico_socket_t *rem_pico_socket_open(uint16_t net, uint16_t proto)
 {
 	rem_arg_t                  *arg = iprcchan_begin_call(chan);
 	rem_res_t                  *res = (rem_res_t*)arg;
@@ -349,7 +351,6 @@ rem_pico_socket_t *rem_pico_socket_open(uint16_t net, uint16_t proto, void (*wak
 	arg->hdr.func = f_rem_pico_socket_open;
 	a->net        = net;
 	a->proto      = proto;
-	a->wakeup     = wakeup;
 	do_call(chan);
 	pico_err = res->hdr.pico_err;
 	retval   = r->retval;
