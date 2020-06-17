@@ -7,6 +7,18 @@
 #include "remcalls.h"
 #include "doioctl.h"
 
+/* debug config */
+
+#define PICOTCP_DEBUG			0
+#define PICOTCP_DEBUG_EVENTS	0
+#define PICOTCP_DEBUG_POLL		0
+
+#if PICOTCP_DEBUG
+#define picotcp_dbg printk
+#else
+#define picotcp_dbg(...) /*as nothing*/
+#endif
+
 #define SOCK_OPEN                   0
 #define SOCK_BOUND                  1
 #define SOCK_LISTEN                 2
@@ -14,9 +26,6 @@
 #define SOCK_ERROR                  4
 #define SOCK_RESET_BY_PEER          5
 #define SOCK_CLOSED                 100
-
-//#define picotcp_dbg(...) /*do{}while(0)*/
-#define picotcp_dbg printk
 
 struct mutex stack_mutex;
 
@@ -205,7 +214,9 @@ static unsigned int picotcp_poll(struct file *file, struct socket *sock, poll_ta
 	struct sock         *sk = sock->sk;
 	unsigned int         mask = 0;
 
+#if PICOTCP_DEBUG_POLL
 	picotcp_dbg("enter picotcp_poll(%p, %lx)\n", psk, (unsigned long)psk->pico);
+#endif
 
 	if (!is_udp(psk) || (poll_requested_events(wait) & EPOLLOUT))
 		sock_poll_wait(file, sock, wait);
@@ -219,19 +230,21 @@ static unsigned int picotcp_poll(struct file *file, struct socket *sock, poll_ta
 	if (psk->revents & PICO_SOCK_EV_FIN)
 		mask |= EPOLLHUP;
 	if (psk->revents & PICO_SOCK_EV_RD)
-		mask |= EPOLLIN | EPOLLRDNORM | EPOLLRDBAND;
+		mask |= EPOLLIN | EPOLLRDNORM; // | EPOLLRDBAND;
 	if (psk->revents & PICO_SOCK_EV_CONN)
 		mask |= EPOLLIN;
 	if (psk->revents & PICO_SOCK_EV_WR)
-		mask |= EPOLLOUT | EPOLLWRNORM | EPOLLWRBAND;
+		mask |= EPOLLOUT | EPOLLWRNORM; // | EPOLLWRBAND;
 
 	/* Addendum: UDP can always write, by default... */
 	if (is_udp(psk))
-		mask |= EPOLLOUT | EPOLLWRNORM | EPOLLWRBAND;
+		mask |= EPOLLOUT | EPOLLWRNORM; // | EPOLLWRBAND;
 
 	psk_state_unlock(psk);
 
+#if PICOTCP_DEBUG_POLL
 	picotcp_dbg("leave picotcp_poll(%p, %lx), mask=%x\n", psk, (unsigned long)psk->pico, mask);
+#endif
 
 	return mask;
 }
@@ -239,6 +252,11 @@ static unsigned int picotcp_poll(struct file *file, struct socket *sock, poll_ta
 static void picotcp_socket_event(uint16_t ev, void *s, void *priv)
 {
 	struct picotcp_sock *psk = priv;
+
+#if PICOTCP_DEBUG_EVENTS
+	picotcp_dbg("enter picotcp_socket_event(%p,%lx)\n", priv, (unsigned long)s);
+	picotcp_dbg("event=%x\n", ev);
+#endif
 
 	if (!psk) {
 		picotcp_dbg("endpoint not initialized yet!\n");
@@ -291,6 +309,10 @@ static void picotcp_socket_event(uint16_t ev, void *s, void *priv)
 	/* sending the event, while no one was listening,
 	   will just cause an extra loop in select() */
 	wake_up_interruptible(sk_sleep(&psk->sk));
+
+#if PICOTCP_DEBUG_EVENTS
+	picotcp_dbg("leave picotcp_socket_event(%p,%lx)\n", priv, (unsigned long)s);
+#endif
 }
 
 static int picotcp_connect(struct socket *sock, struct sockaddr *_saddr, int socklen, int flags)
@@ -320,9 +342,9 @@ static int picotcp_connect(struct socket *sock, struct sockaddr *_saddr, int soc
 	}
 
 	pico_stack_lock();
-	psk_state_lock(psk);
+	//psk_state_lock(psk);
 	err = rem_pico_socket_connect(psk->pico, &addr, port);
-	psk_state_unlock(psk);
+	//psk_state_unlock(psk);
 	pico_stack_unlock();
 
 	if (err) {
@@ -494,9 +516,9 @@ static int picotcp_accept(struct socket *sock, struct socket *newsock, int flags
 		struct rem_pico_socket *ps;
 
 		pico_stack_lock();
-		psk_state_lock(psk);
+		//psk_state_lock(psk);
 		ps = rem_pico_socket_accept(psk->pico, &picoaddr, &port);
-		psk_state_unlock(psk);
+		//psk_state_unlock(psk);
 		if (!ps) {
 			pico_stack_unlock();
 			ret = 0 - pico_err;
@@ -540,12 +562,12 @@ static int picotcp_listen(struct socket *sock, int backlog)
 	struct picotcp_sock *psk = picotcp_sock(sock);
 	struct sock         *sk = sock->sk;
 	int                  err;
-	int                  ret;
+	int                  ret = 0;
 
 	picotcp_dbg("enter picotcp_listen(%p, %lx)\n", psk, (unsigned long)psk->pico);
 
 	pico_stack_lock();
-	psk_state_lock(psk);
+	//psk_state_lock(psk);
 
 	err = rem_pico_socket_listen(psk->pico, backlog);
 
@@ -554,9 +576,8 @@ static int picotcp_listen(struct socket *sock, int backlog)
 	} else {
 		psk->state = SOCK_LISTEN;
 		sk->sk_state = TCP_LISTEN;
-		ret = 0;
 	}
-	psk_state_unlock(psk);
+	//psk_state_unlock(psk);
 	pico_stack_unlock();
 
 	picotcp_dbg("leave picotcp_listen(%p, %lx), ret=%d\n", psk, (unsigned long)psk->pico, ret);
@@ -573,7 +594,7 @@ static int picotcp_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	int                  tot_len = 0;
 	int                  ret;
 
-	picotcp_dbg("enter picotcp_sendmsg(%p, %lx)\n", psk, (unsigned long)psk->pico);
+	picotcp_dbg("enter picotcp_sendmsg(%p, %lx), len=%ld\n", psk, (unsigned long)psk->pico, len);
 
 	psk_sock_lock(psk);
 
@@ -603,12 +624,13 @@ static int picotcp_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	while (tot_len < len) {
 		int r;
 		pico_stack_lock();
-		psk_state_lock(psk);
+		//psk_state_lock(psk);
+		pico_event_clear(psk, PICO_SOCK_EV_WR);
 		if (msg->msg_namelen > 0)
 			r = rem_pico_socket_sendto(psk->pico, kbuf + tot_len, len - tot_len, &addr, port);
 		else
 			r = rem_pico_socket_send(psk->pico, kbuf + tot_len, len - tot_len);
-		psk_state_unlock(psk);
+		//psk_state_unlock(psk);
 		pico_stack_unlock();
 		if (r < 0) {
 			ret = 0 - pico_err;
@@ -617,7 +639,6 @@ static int picotcp_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 
 		tot_len += r;
 
-		pico_event_clear(psk, PICO_SOCK_EV_WR);
 		if ((tot_len > 0) && is_udp(psk))
 			break;
 
@@ -719,9 +740,9 @@ static int picotcp_recvmsg(struct socket *sock, struct msghdr *msg, size_t len, 
 	while (tot_len < len) {
 		int r;
 		pico_stack_lock();
-		psk_state_lock(psk);
+		//psk_state_lock(psk);
 		r = rem_pico_socket_recvfrom(psk->pico, kbuf + tot_len, len - tot_len, &addr, &port);
-		psk_state_unlock(psk);
+		//psk_state_unlock(psk);
 		pico_stack_unlock();
 		if (r < 0) {
 			picotcp_dbg("pico returned error %d\n", -pico_err);
@@ -819,9 +840,9 @@ static int picotcp_shutdown(struct socket *sock, int how)
 	if (psk->pico) /* valid socket, try to close it */
 	{
 		pico_stack_lock();
-		psk_state_lock(psk);
+		//psk_state_lock(psk);
 		rem_pico_socket_shutdown(psk->pico, how);
-		psk_state_unlock(psk);
+		//psk_state_unlock(psk);
 		pico_stack_unlock();
 	}
 
@@ -843,10 +864,12 @@ static int picotcp_release(struct socket *sock)
 	}
 
 	pico_stack_lock();
-	psk_state_lock(psk);
+	//psk_state_lock(psk);
+	rem_set_priv(psk->pico, NULL);
 	rem_pico_socket_close(psk->pico);
+	psk->pico   = NULL;
 	psk->in_use = 0;
-	psk_state_unlock(psk);
+	//psk_state_unlock(psk);
 	pico_stack_unlock();
 	mutex_destroy(&psk->mutex_lock);
 	sock_orphan(sock->sk);
@@ -1011,8 +1034,7 @@ static struct picotcp_sock *picotcp_sock_new(struct sock *parent, struct net *ne
 	struct picotcp_sock *psk = NULL;
 	struct sock         *sk;
 
-	if (parent)
-		bh_lock_sock(parent);
+	//if (parent) bh_lock_sock(parent);
 
 	sk = sk_alloc(net, PF_INET, GFP_ATOMIC, &picotcp_proto, 0);
 
@@ -1032,8 +1054,7 @@ static struct picotcp_sock *picotcp_sock_new(struct sock *parent, struct net *ne
 
 quit:
 
-	if (parent)
-		bh_unlock_sock(parent);
+	//if (parent) bh_unlock_sock(parent);
 
 	return psk;
 }
