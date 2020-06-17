@@ -13,16 +13,6 @@ extern void rem_stack_lock(void);
 
 extern void rem_stack_unlock(void);
 
-extern uint16_t rem_get_proto(rem_pico_socket_t *s);
-
-typedef struct rem_get_proto_arg {
-	rem_pico_socket_t *s;
-} rem_get_proto_arg_t;
-
-typedef struct rem_get_proto_res {
-	uint16_t retval;
-} rem_get_proto_res_t;
-
 extern void rem_set_priv(rem_pico_socket_t *s, void *priv);
 
 typedef struct rem_set_priv_arg {
@@ -237,7 +227,6 @@ typedef struct rem_pico_socket_setoption_res {
 typedef enum rem_functions {
 	f_rem_stack_lock,
 	f_rem_stack_unlock,
-	f_rem_get_proto,
 	f_rem_set_priv,
 	f_rem_get_devices,
 	f_rem_get_device_config,
@@ -268,7 +257,6 @@ typedef struct rem_res_hdr {
 typedef struct rem_arg {
 	rem_arg_hdr_t hdr;
 	union {
-		rem_get_proto_arg_t             rem_get_proto_arg;
 		rem_set_priv_arg_t              rem_set_priv_arg;
 		rem_get_device_config_arg_t     rem_get_device_config_arg;
 		rem_pico_socket_shutdown_arg_t  rem_pico_socket_shutdown_arg;
@@ -290,7 +278,6 @@ typedef struct rem_arg {
 typedef struct rem_res {
 	rem_res_hdr_t hdr;
 	union {
-		rem_get_proto_res_t             rem_get_proto_res;
 		rem_get_devices_res_t           rem_get_devices_res;
 		rem_get_device_config_res_t     rem_get_device_config_res;
 		rem_pico_socket_shutdown_res_t  rem_pico_socket_shutdown_res;

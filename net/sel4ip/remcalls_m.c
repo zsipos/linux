@@ -72,22 +72,6 @@ void rem_stack_unlock(void)
 	iprcchan_end_call(chan);
 }
 
-uint16_t rem_get_proto(rem_pico_socket_t *s)
-{
-	rem_arg_t           *arg = iprcchan_begin_call(chan);
-	rem_res_t           *res = (rem_res_t*)arg;
-	rem_get_proto_arg_t *a = &arg->u.rem_get_proto_arg;
-	rem_get_proto_res_t *r = &res->u.rem_get_proto_res;
-	uint16_t             retval;
-
-	arg->hdr.func = f_rem_get_proto;
-	a->s          = s;
-	do_call(chan);
-	retval = r->retval;
-	iprcchan_end_call(chan);
-	return retval;
-}
-
 void rem_set_priv(rem_pico_socket_t *s, void *priv)
 {
 	rem_arg_t          *arg = iprcchan_begin_call(chan);
@@ -203,7 +187,7 @@ int rem_pico_socket_bind(rem_pico_socket_t *s, union pico_address *local_addr, u
 	do_call(chan);
 	pico_err = res->hdr.pico_err;
 	retval   = r->retval;
-	*port = r->port;
+	*port    = r->port;
 	iprcchan_end_call(chan);
 	return retval;
 }
