@@ -1,15 +1,3 @@
-#include <linux/mutex.h>
-#include <linux/types.h>
-#include <linux/socket.h>
-#include <linux/kthread.h>
-#include <linux/module.h>
-#include <linux/wait.h>
-#include <net/ip.h>
-#include <net/protocol.h>
-#include <linux/if_arp.h>
-#include <linux/in.h>
-#include <linux/route.h>
-
 #include "picotcp.h"
 #include "remcalls.h"
 
@@ -30,22 +18,16 @@ static int picotcp_iosgaddr(struct socket *sock, unsigned int cmd, unsigned long
 	addr = (struct sockaddr_in *) &ifr->ifr_addr;
 
 	if (set) {
-		printk("iosgaddr set\n");
-		return -EOPNOTSUPP;
-#if 0
-		if (!l || addr->sin_addr.s_addr != l->address.addr) {
-			struct pico_ip4 a, nm;
-			a.addr = addr->sin_addr.s_addr;
-			if (l)
-				nm.addr = l->netmask.addr;
-			else
-				nm.addr = htonl(0xFFFFFF00); /* Default 24 bit nm */
-			if (l)
-				pico_ipv4_link_del(dev, l->address);
-			pico_ipv4_link_add(dev, a, nm);
-		}
-		return 0;
-#endif
+		union pico_address pico_address;
+		union pico_address pico_netmask;
+
+		pico_address.ip4.addr = addr->sin_addr.s_addr;
+		if (config.hasipv4link)
+			pico_netmask = config.netmask;
+		else
+			pico_netmask.ip4.addr = htonl(0xffffff00); // default to 24 bit netmask
+
+		return rem_set_device_address(config.name, &pico_address, &pico_netmask);
 	}
 
 	addr->sin_family = AF_INET;
@@ -103,18 +85,10 @@ static int picotcp_iosgmask(struct socket *sock, unsigned int cmd, unsigned long
 	addr = (struct sockaddr_in *) &ifr->ifr_addr;
 
 	if (set) {
-		printk("iosgmask set\n");
-		return -EOPNOTSUPP;
-#if 0
-		if (addr->sin_addr.s_addr != l->netmask.addr) {
-			struct pico_ip4 a, nm;
-			a.addr = l->address.addr;
-			nm.addr = addr->sin_addr.s_addr;
-			pico_ipv4_link_del(dev, l->address);
-			pico_ipv4_link_add(dev, a, nm);
-		}
-		return 0;
-#endif
+		union pico_address pico_netmask;
+
+		pico_netmask.ip4.addr = addr->sin_addr.s_addr;
+		return rem_set_device_address(config.name, &config.address, &pico_netmask);
 	}
 
 	addr->sin_family = AF_INET;
@@ -140,16 +114,7 @@ static int picotcp_iosgflags(struct socket *sock, unsigned int cmd, unsigned lon
 
 	/* Set flags: we only care about UP flag being reset */
 	if (set && ((ifr->ifr_flags & IFF_UP) == 0)) {
-		printk("iosgflags set\n");
-		return -EOPNOTSUPP;
-#if 0
-		struct pico_ipv4_link *l = pico_ipv4_link_by_dev(dev);
-		while (l) {
-			pico_ipv4_link_del(dev, l->address);
-			l = pico_ipv4_link_by_dev(dev);
-		}
-		return 0;
-#endif
+		return rem_device_down(config.name);
 	}
 
 	ifr->ifr_flags = IFF_BROADCAST | IFF_MULTICAST;
@@ -269,46 +234,34 @@ static int picotcp_gifconf(struct socket *sock, unsigned int cmd, unsigned long 
 
 static int picotcp_addroute(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
-	printk("addroute\n");
-	return -EOPNOTSUPP;
-#if 0
-	struct rtentry _rte, *rte = &_rte;
-	struct pico_ip4 a, g, n;
-	struct pico_ipv4_link *link = NULL;
-	int flags = 1;
+	struct rtentry      _rte, *rte = &_rte;
+	union pico_address  a, g, n;
+	int                 flags = 1;
+	char               *devname;
 
 	if (copy_from_user(rte, (void*)arg, sizeof(struct rtentry)))
 		return -EFAULT;
 
-	/*
-	dev = pico_get_device((char *)rte->rt_dev);
-	if (dev)
-		link = pico_ipv4_link_by_dev(dev);
-		*/
+	memcpy(&a.ip4, &((struct sockaddr_in * )(&rte->rt_dst))->sin_addr.s_addr,
+			sizeof(struct pico_ip4));
+	memcpy(&g.ip4, &((struct sockaddr_in * )(&rte->rt_gateway))->sin_addr.s_addr,
+			sizeof(struct pico_ip4));
+	memcpy(&n.ip4, &((struct sockaddr_in * )(&rte->rt_genmask))->sin_addr.s_addr,
+			sizeof(struct pico_ip4));
+	a.ip4.addr &= n.ip4.addr;
 
-	memcpy(&a, &((struct sockaddr_in * )(&rte->rt_dst))->sin_addr.s_addr,
-			sizeof(struct pico_ip4));
-	memcpy(&g, &((struct sockaddr_in * )(&rte->rt_gateway))->sin_addr.s_addr,
-			sizeof(struct pico_ip4));
-	memcpy(&n, &((struct sockaddr_in * )(&rte->rt_genmask))->sin_addr.s_addr,
-			sizeof(struct pico_ip4));
-	a.addr &= n.addr;
-
-	if (n.addr == 0)
+	if (n.ip4.addr == 0)
 		flags += 2;
+
+	devname = rte->rt_dev;
+	if (!devname)
+		devname = "";
 
 	/* TODO: link from device name in rt_dev (u32-> *char) */
 	if (rte->rt_metric <= 0)
 		rte->rt_metric = 1;
 
-	if (pico_ipv4_route_add(a, n, g, rte->rt_metric, link) < 0)
-		return -pico_err;
-	/*
-	if (copy_to_user((void*)arg, rte, sizeof(struct rtentry)))
-		return -EFAULT;
-		*/
-	return 0;
-#endif
+	return rem_device_addroute(devname, &a, &n, &g, rte->rt_metric);
 }
 
 static int picotcp_get_timestamp(struct socket *sock, unsigned long arg)

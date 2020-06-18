@@ -93,7 +93,6 @@ int rem_get_devices(pico_devices_t *devices)
 
 	arg->hdr.func = f_rem_get_devices;
 	do_call(chan);
-	pico_err = res->hdr.pico_err;
 	retval   = r->retval;
 	*devices = r->devices;
 	iprcchan_end_call(chan);
@@ -112,9 +111,84 @@ int rem_get_device_config(const char *name, pico_device_config_t *config)
 	strncpy(a->name, name, sizeof(a->name)-1);
 	a->name[sizeof(a->name)-1] = 0;
 	do_call(chan);
-	pico_err = res->hdr.pico_err;
-	retval   = r->retval;
-	*config  = r->config;
+	retval  = r->retval;
+	*config = r->config;
+	iprcchan_end_call(chan);
+	return retval;
+}
+
+int rem_set_device_address(const char *name, union pico_address *address, union pico_address *netmask)
+{
+	rem_arg_t                    *arg = iprcchan_begin_call(chan);
+	rem_res_t                    *res = (rem_res_t*)arg;
+	rem_set_device_address_arg_t *a = &arg->u.rem_set_device_address_arg;
+	rem_set_device_address_res_t *r = &res->u.rem_set_device_address_res;
+	int                           retval;
+
+	arg->hdr.func = f_rem_set_device_address;
+	strncpy(a->name, name, sizeof(a->name)-1);
+	a->name[sizeof(a->name)-1] = 0;
+	a->address = *address;
+	a->netmask = *netmask;
+	do_call(chan);
+	retval = r->retval;
+	iprcchan_end_call(chan);
+	return retval;
+}
+
+int rem_device_down(const char *name)
+{
+	rem_arg_t             *arg = iprcchan_begin_call(chan);
+	rem_res_t             *res = (rem_res_t*)arg;
+	rem_device_down_arg_t *a = &arg->u.rem_device_down_arg;
+	rem_device_down_res_t *r = &res->u.rem_device_down_res;
+	int                    retval;
+
+	arg->hdr.func = f_rem_device_down;
+	strncpy(a->name, name, sizeof(a->name)-1);
+	a->name[sizeof(a->name)-1] = 0;
+	do_call(chan);
+	retval = r->retval;
+	iprcchan_end_call(chan);
+	return retval;
+}
+
+int rem_device_addroute(const char         *name,
+						union pico_address *address,
+						union pico_address *genmask,
+						union pico_address *gateway,
+						int                 metric)
+{
+	rem_arg_t                 *arg = iprcchan_begin_call(chan);
+	rem_res_t                 *res = (rem_res_t*)arg;
+	rem_device_addroute_arg_t *a = &arg->u.rem_device_addroute_arg;
+	rem_device_addroute_res_t *r = &res->u.rem_device_addroute_res;
+	int                        retval;
+
+	arg->hdr.func = f_rem_device_addroute;
+	strncpy(a->name, name, sizeof(a->name)-1);
+	a->name[sizeof(a->name)-1] = 0;
+	a->address = *address;
+	a->genmask = *genmask;
+	a->gateway = *gateway;
+	a->metric  = metric;
+	do_call(chan);
+	retval = r->retval;
+	iprcchan_end_call(chan);
+	return retval;
+}
+
+int rem_get_routes(pico_routes_t *routes)
+{
+	rem_arg_t            *arg = iprcchan_begin_call(chan);
+	rem_res_t            *res = (rem_res_t*)arg;
+	rem_get_routes_res_t *r = &res->u.rem_get_routes_res;
+	int                   retval;
+
+	arg->hdr.func = f_rem_get_routes;
+	do_call(chan);
+	retval  = r->retval;
+	*routes = r->routes;
 	iprcchan_end_call(chan);
 	return retval;
 }

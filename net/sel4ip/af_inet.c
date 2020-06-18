@@ -685,11 +685,6 @@ static int picotcp_recvmsg(struct socket *sock, struct msghdr *msg, size_t len, 
 	uint16_t             port;
 	int                  ret;
 
-	/* Keep kbuf in case of peek */
-	static uint8_t *peeked_kbuf = NULL;
-	static uint8_t *peeked_kbuf_start = NULL;
-	static int peeked_kbuf_len = 0;
-
 	picotcp_dbg("enter picotcp_recvmsg(%p, %lx) len=%ld flags=%x\n", psk, (unsigned long)psk->pico, len, flags);
 
 	psk_sock_lock(psk);
@@ -700,7 +695,9 @@ static int picotcp_recvmsg(struct socket *sock, struct msghdr *msg, size_t len, 
 	}
 
 	if (flags & MSG_PEEK) {
-		picotcp_dbg("MSG_PEEK\n");
+		printk(KERN_ERR "MSG_PEEK not supported\n");
+		ret = -EOPNOTSUPP;
+		goto quit;
 	}
 
 	if (is_udp(psk) && (len > 65535))
@@ -710,31 +707,6 @@ static int picotcp_recvmsg(struct socket *sock, struct msghdr *msg, size_t len, 
 	if (!kbuf) {
 		ret = -ENOMEM;
 		goto quit;
-	}
-	if (peeked_kbuf) {
-		if (len < peeked_kbuf_len) {
-			memcpy(kbuf, peeked_kbuf, len);
-			tot_len += len;
-		} else {
-			memcpy(kbuf, peeked_kbuf, peeked_kbuf_len);
-			tot_len += peeked_kbuf_len;
-		}
-
-		/* If it is an actual read (i.e. no MSG_PEEK set),
-		 * consume the bytes already taken from the saved kbuf.
-		 */
-		if (!(flags & MSG_PEEK)) {
-			peeked_kbuf += tot_len;
-			peeked_kbuf_len -= tot_len;
-			/* If all bytes have been consumed, get rid of the
-			 * saved buffer.
-			 */
-			if (peeked_kbuf_len <= 0) {
-				kfree(peeked_kbuf_start);
-				peeked_kbuf_start = peeked_kbuf = NULL;
-				peeked_kbuf_len = 0;
-			}
-		}
 	}
 
 	while (tot_len < len) {
@@ -755,9 +727,8 @@ static int picotcp_recvmsg(struct socket *sock, struct msghdr *msg, size_t len, 
 		if (r == 0) {
 			pico_event_clear(psk, PICO_SOCK_EV_RD);
 			pico_event_clear(psk, PICO_SOCK_EV_ERR);
-			if (tot_len > 0) {
+			if (tot_len > 0)
 				goto recv_success;
-			}
 		}
 		if ((tot_len > 0) && is_udp(psk))
 			goto recv_success;
@@ -766,7 +737,6 @@ static int picotcp_recvmsg(struct socket *sock, struct msghdr *msg, size_t len, 
 			if (tot_len > 0)
 				goto recv_success;
 			else {
-				picotcp_dbg("MSG_DONTWAIT\n");
 				ret = -EWOULDBLOCK;
 				goto quit;
 			}
@@ -799,15 +769,6 @@ static int picotcp_recvmsg(struct socket *sock, struct msghdr *msg, size_t len, 
 
 	if (memcpy_to_msg(msg, kbuf, tot_len) < 0) {
 		picotcp_dbg("memcpy_to_msg_failed\n");
-	}
-
-	/* If in PEEK Mode, and no packet stored yet,
-	 * save this segment for later use.
-	 */
-	if ((flags & MSG_PEEK) && (!peeked_kbuf_start)) {
-		peeked_kbuf_start = peeked_kbuf = kbuf;
-		peeked_kbuf_len = tot_len;
-		kbuf = NULL;
 	}
 
 	if (tot_len < len) {

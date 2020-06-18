@@ -21,8 +21,10 @@ typedef struct rem_set_priv_arg {
 } rem_set_priv_arg_t;
 
 /* ioctl helpers */
+/* DO NOT CALL WITH LOCK */
 
 #define MAX_DEVICES 10
+#define MAX_ROUTES	10
 
 typedef char pico_dev_name_t[MAX_DEVICE_NAME];
 
@@ -40,6 +42,20 @@ typedef struct pico_device_config {
 	int                hasmac;
 	struct pico_eth    mac;
 } pico_device_config_t;
+
+typedef struct pico_route {
+	pico_dev_name_t    devname;
+	union pico_address dest;
+	union pico_address netmask;
+	union pico_address gateway;
+	int                metric;
+	int                flags;
+} pico_route_t;
+
+typedef struct pico_routes {
+	int          count;
+	pico_route_t routes[MAX_ROUTES];
+} pico_routes_t;
 
 extern int rem_get_devices(pico_devices_t *devices);
 
@@ -59,7 +75,55 @@ typedef struct rem_get_device_config_res {
 	pico_device_config_t config;
 } rem_get_device_config_res_t;
 
+extern int rem_set_device_address(const char *name, union pico_address *address, union pico_address *netmask);
+
+typedef struct rem_set_device_address_arg {
+	pico_dev_name_t    name;
+	union pico_address address;
+	union pico_address netmask;
+} rem_set_device_address_arg_t;
+
+typedef struct rem_set_device_address_res {
+	int retval;
+} rem_set_device_address_res_t;
+
+extern int rem_device_down(const char *name);
+
+typedef struct rem_device_down_arg {
+	pico_dev_name_t    name;
+} rem_device_down_arg_t;
+
+typedef struct rem_device_down_res {
+	int retval;
+} rem_device_down_res_t;
+
+extern int rem_device_addroute(const char         *name,
+		                       union pico_address *address,
+							   union pico_address *genmask,
+							   union pico_address *gateway,
+							   int                 metric);
+
+typedef struct rem_device_addroute_arg {
+	pico_dev_name_t    name;
+	union pico_address address;
+	union pico_address genmask;
+	union pico_address gateway;
+	int                metric;
+} rem_device_addroute_arg_t;
+
+typedef struct rem_device_addroute_res {
+	int retval;
+} rem_device_addroute_res_t;
+
+extern int rem_get_routes(pico_routes_t *routes);
+
+typedef struct rem_get_routes_res {
+	int           retval;
+	pico_routes_t routes;
+} rem_get_routes_res_t;
+
 /* socket functions */
+/* YOU MUST LOCK */
 
 extern int rem_pico_socket_shutdown(rem_pico_socket_t *s, int mode);
 
@@ -230,6 +294,10 @@ typedef enum rem_functions {
 	f_rem_set_priv,
 	f_rem_get_devices,
 	f_rem_get_device_config,
+	f_rem_set_device_address,
+	f_rem_device_down,
+	f_rem_device_addroute,
+	f_rem_get_routes,
 	f_rem_pico_socket_shutdown,
 	f_rem_pico_socket_connect,
 	f_rem_pico_socket_close,
@@ -259,6 +327,9 @@ typedef struct rem_arg {
 	union {
 		rem_set_priv_arg_t              rem_set_priv_arg;
 		rem_get_device_config_arg_t     rem_get_device_config_arg;
+		rem_set_device_address_arg_t    rem_set_device_address_arg;
+		rem_device_down_arg_t           rem_device_down_arg;
+		rem_device_addroute_arg_t       rem_device_addroute_arg;
 		rem_pico_socket_shutdown_arg_t  rem_pico_socket_shutdown_arg;
 		rem_pico_socket_connect_arg_t   rem_pico_socket_connect_arg;
 		rem_pico_socket_close_arg_t     rem_pico_socket_close_arg;
@@ -280,6 +351,10 @@ typedef struct rem_res {
 	union {
 		rem_get_devices_res_t           rem_get_devices_res;
 		rem_get_device_config_res_t     rem_get_device_config_res;
+		rem_set_device_address_res_t    rem_set_device_address_res;
+		rem_device_down_res_t           rem_device_down_res;
+		rem_device_addroute_res_t       rem_device_addroute_res;
+		rem_get_routes_res_t            rem_get_routes_res;
 		rem_pico_socket_shutdown_res_t  rem_pico_socket_shutdown_res;
 		rem_pico_socket_connect_res_t   rem_pico_socket_connect_res;
 		rem_pico_socket_close_res_t     rem_pico_socket_close_res;
