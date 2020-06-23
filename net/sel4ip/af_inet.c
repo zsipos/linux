@@ -10,7 +10,7 @@
 /* debug config */
 
 #define PICOTCP_DEBUG			0
-#define PICOTCP_DEBUG_EVENTS	0
+#define PICOTCP_DEBUG_EVENTS	1
 #define PICOTCP_DEBUG_POLL		0
 
 #if PICOTCP_DEBUG
@@ -625,7 +625,8 @@ static int picotcp_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 		int r;
 		pico_stack_lock();
 		//psk_state_lock(psk);
-		pico_event_clear(psk, PICO_SOCK_EV_WR);
+		if (!is_udp(psk))
+			pico_event_clear(psk, PICO_SOCK_EV_WR);
 		if (msg->msg_namelen > 0)
 			r = rem_pico_socket_sendto(psk->pico, kbuf + tot_len, len - tot_len, &addr, port);
 		else
@@ -697,6 +698,12 @@ static int picotcp_recvmsg(struct socket *sock, struct msghdr *msg, size_t len, 
 	if (flags & MSG_PEEK) {
 		printk(KERN_ERR "MSG_PEEK not supported\n");
 		ret = -EOPNOTSUPP;
+		goto quit;
+	}
+
+	if (flags & MSG_ERRQUEUE) {
+		printk("picotcp: MSG_ERRQUE not supported, return 0\n");
+		ret = 0;
 		goto quit;
 	}
 
@@ -946,7 +953,9 @@ static int picotcp_setsockopt(struct socket *sock, int level, int optname, char 
 	}
 
 	if (option < 0) {
-		ret = -EOPNOTSUPP;
+		ret = 0;
+		printk("picotcp: unknown option %d ignored\n", optname);
+		//ret = -EOPNOTSUPP;
 		goto quit;
 	}
 

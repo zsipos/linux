@@ -23,6 +23,7 @@ Author: Andrei Carp, Maxime Vincent
 #include "pico_tree.h"
 #include "pico_socket.h"
 #include "pico_protocol.h"
+#include "pico_queue.h"
 #include <linux/mutex.h>
 #include <linux/types.h>
 #include <linux/socket.h>
