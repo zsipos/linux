@@ -37,6 +37,7 @@ struct picotcp_sock {
 	uint8_t                 state;
 	uint16_t                events; /* events that we filter for */
 	volatile uint16_t       revents; /* received events */
+	volatile uint32_t       udpcnt;
 	struct mutex            mutex_lock; /* mutex for clearing revents */
 	struct net             *net; /* Network */
 };
@@ -155,13 +156,6 @@ static struct proto picotcp_proto = {
 	.obj_size = sizeof(struct picotcp_sock),
 };
 
-static void pico_event_clear(struct picotcp_sock *psk, uint16_t events)
-{
-	psk_state_lock(psk);
-	psk->revents &= ~events;
-	psk_state_unlock(psk);
-}
-
 static uint16_t pico_bsd_select(struct picotcp_sock *psk)
 {
 	uint16_t events = psk->events & psk->revents; /* maybe an event we are waiting for, was already queued ? */
@@ -218,8 +212,7 @@ static unsigned int picotcp_poll(struct file *file, struct socket *sock, poll_ta
 	picotcp_dbg("enter picotcp_poll(%p, %lx)\n", psk, (unsigned long)psk->pico);
 #endif
 
-	if (!is_udp(psk) || (poll_requested_events(wait) & EPOLLOUT))
-		sock_poll_wait(file, sock, wait);
+	sock_poll_wait(file, sock, wait);
 
 	psk_state_lock(psk);
 
@@ -229,8 +222,9 @@ static unsigned int picotcp_poll(struct file *file, struct socket *sock, poll_ta
 		mask |= EPOLLHUP;
 	if (psk->revents & PICO_SOCK_EV_FIN)
 		mask |= EPOLLHUP;
-	if (psk->revents & PICO_SOCK_EV_RD)
+	if (psk->revents & PICO_SOCK_EV_RD) {
 		mask |= EPOLLIN | EPOLLRDNORM; // | EPOLLRDBAND;
+	}
 	if (psk->revents & PICO_SOCK_EV_CONN)
 		mask |= EPOLLIN;
 	if (psk->revents & PICO_SOCK_EV_WR)
@@ -304,6 +298,9 @@ static void picotcp_socket_event(uint16_t ev, void *s, void *priv)
 		psk->state = SOCK_CLOSED;
 	}
 
+	if (is_udp(psk) && (ev & PICO_SOCK_EV_RD))
+		psk->udpcnt++;
+
 	psk_state_unlock(psk);
 
 	/* sending the event, while no one was listening,
@@ -313,6 +310,19 @@ static void picotcp_socket_event(uint16_t ev, void *s, void *priv)
 #if PICOTCP_DEBUG_EVENTS
 	picotcp_dbg("leave picotcp_socket_event(%p,%lx)\n", priv, (unsigned long)s);
 #endif
+}
+
+static void pico_event_clear(struct picotcp_sock *psk, uint16_t events)
+{
+	psk_state_lock(psk);
+	psk->revents &= ~events;
+	if (is_udp(psk) && (events & PICO_SOCK_EV_RD)) {
+		if (psk->udpcnt)
+			psk->udpcnt--;
+		if (psk->udpcnt)
+			psk->revents |= PICO_SOCK_EV_RD;
+	}
+	psk_state_unlock(psk);
 }
 
 static int picotcp_connect(struct socket *sock, struct sockaddr *_saddr, int socklen, int flags)
@@ -594,6 +604,7 @@ static int picotcp_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	int                  tot_len = 0;
 	int                  ret;
 
+
 	picotcp_dbg("enter picotcp_sendmsg(%p, %lx), len=%ld\n", psk, (unsigned long)psk->pico, len);
 
 	psk_sock_lock(psk);
@@ -625,8 +636,7 @@ static int picotcp_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 		int r;
 		pico_stack_lock();
 		//psk_state_lock(psk);
-		if (!is_udp(psk))
-			pico_event_clear(psk, PICO_SOCK_EV_WR);
+		pico_event_clear(psk, PICO_SOCK_EV_WR);
 		if (msg->msg_namelen > 0)
 			r = rem_pico_socket_sendto(psk->pico, kbuf + tot_len, len - tot_len, &addr, port);
 		else
@@ -731,14 +741,12 @@ static int picotcp_recvmsg(struct socket *sock, struct msghdr *msg, size_t len, 
 
 		tot_len += r;
 
-		if (r == 0) {
+		if (r == 0 || is_udp(psk)) {
 			pico_event_clear(psk, PICO_SOCK_EV_RD);
 			pico_event_clear(psk, PICO_SOCK_EV_ERR);
 			if (tot_len > 0)
 				goto recv_success;
 		}
-		if ((tot_len > 0) && is_udp(psk))
-			goto recv_success;
 
 		if (flags & MSG_DONTWAIT) {
 			if (tot_len > 0)
@@ -752,7 +760,8 @@ static int picotcp_recvmsg(struct socket *sock, struct msghdr *msg, size_t len, 
 		if (tot_len < len) {
 			uint16_t ev = pico_bsd_wait(psk, 1, 0, 1);
 			if ((ev & (PICO_SOCK_EV_ERR | PICO_SOCK_EV_FIN | PICO_SOCK_EV_CLOSE)) || (ev == 0)) {
-				pico_event_clear(psk, PICO_SOCK_EV_RD);
+				//adi: next read cleans it
+				//pico_event_clear(psk, PICO_SOCK_EV_RD);
 				pico_event_clear(psk, PICO_SOCK_EV_ERR);
 				ret = -EINTR;
 				goto quit;
@@ -1021,6 +1030,7 @@ static struct picotcp_sock *picotcp_sock_new(struct sock *parent, struct net *ne
 	psk->in_use  = 0;
 	psk->events  = 0;
 	psk->revents = 0;
+	psk->udpcnt  = 0;
 
 quit:
 
