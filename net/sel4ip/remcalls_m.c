@@ -498,6 +498,23 @@ int rem_pico_socket_recvfrom_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct 
 	return retval;
 }
 
+int rem_pico_socket_udp_poll(iprcchan_t *chan, rem_pico_socket_t *s)
+{
+	rem_arg_t                      *arg = iprcchan_begin_call(chan);
+	rem_res_t                      *res = (rem_res_t*)arg;
+	rem_pico_socket_udp_poll_arg_t *a = &arg->u.rem_pico_socket_udp_poll_arg;
+	rem_pico_socket_udp_poll_res_t *r = &res->u.rem_pico_socket_udp_poll_res;
+	int                             retval;
+
+	arg->hdr.func = f_rem_pico_socket_udp_poll;
+	a->s          = s;
+	do_call(chan);
+	pico_err    = res->hdr.pico_err;
+	retval      = r->retval;
+	iprcchan_end_call(chan);
+	return retval;
+}
+
 rem_pico_socket_t *rem_pico_socket_open(iprcchan_t *chan, uint16_t net, uint16_t proto)
 {
 	rem_arg_t                  *arg = iprcchan_begin_call(chan);

@@ -259,6 +259,16 @@ typedef struct rem_pico_socket_recvfrom_res {
 
 extern int rem_pico_socket_recvfrom_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct msghdr *msg, int len, union pico_address *orig, uint16_t *local_port);
 
+extern int rem_pico_socket_udp_poll(iprcchan_t *chan, rem_pico_socket_t *s);
+
+typedef struct rem_pico_socket_udp_poll_arg {
+	rem_pico_socket_t *s;
+} rem_pico_socket_udp_poll_arg_t;
+
+typedef struct rem_pico_socket_udp_poll_res {
+	int                retval;
+} rem_pico_socket_udp_poll_res_t;
+
 extern rem_pico_socket_t *rem_pico_socket_open(iprcchan_t *chan, uint16_t net, uint16_t proto);
 
 typedef struct rem_pico_socket_open_arg {
@@ -319,6 +329,7 @@ typedef enum rem_functions {
 	f_rem_pico_socket_sendto,
 	f_rem_pico_socket_send,
 	f_rem_pico_socket_recvfrom,
+	f_rem_pico_socket_udp_poll,
 	f_rem_pico_socket_open,
 	f_rem_pico_socket_getoption,
 	f_rem_pico_socket_setoption,
@@ -351,6 +362,7 @@ typedef struct rem_arg {
 		rem_pico_socket_sendto_arg_t    rem_pico_socket_sendto_arg;
 		rem_pico_socket_send_arg_t      rem_pico_socket_send_arg;
 		rem_pico_socket_recvfrom_arg_t  rem_pico_socket_recvfrom_arg;
+		rem_pico_socket_udp_poll_arg_t  rem_pico_socket_udp_poll_arg;
 		rem_pico_socket_open_arg_t      rem_pico_socket_open_arg;
 		rem_pico_socket_getoption_arg_t rem_pico_socket_getoption_arg;
 		rem_pico_socket_setoption_arg_t rem_pico_socket_setoption_arg;
@@ -376,6 +388,7 @@ typedef struct rem_res {
 		rem_pico_socket_sendto_res_t    rem_pico_socket_sendto_res;
 		rem_pico_socket_send_res_t      rem_pico_socket_send_res;
 		rem_pico_socket_recvfrom_res_t  rem_pico_socket_recvfrom_res;
+		rem_pico_socket_udp_poll_res_t  rem_pico_socket_udp_poll_res;
 		rem_pico_socket_open_res_t      rem_pico_socket_open_res;
 		rem_pico_socket_getoption_res_t rem_pico_socket_getoption_res;
 		rem_pico_socket_setoption_res_t rem_pico_socket_setoption_res;
