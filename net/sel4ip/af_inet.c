@@ -319,11 +319,6 @@ static void picotcp_socket_event(uint16_t ev, void *s, void *priv)
 	if (is_udp(psk) && (ev & PICO_SOCK_EV_RD))
 		psk->udpcnt++;
 
-	if (psk->udpcnt > 5)
-		printk("%d udp pending\n", psk->udpcnt);
-
-	//if(psk->stack_chan == rem_get_chan(1)) printk("%llx %d\n", s, psk->udpcnt);
-
 	psk_events_unlock(psk);
 
 	/* sending the event, while no one was listening,
@@ -755,7 +750,7 @@ static int picotcp_recvmsg_stream(struct socket *sock, struct msghdr *msg, size_
 		psk_stack_unlock(psk);
 		if (r < 0) {
 			picotcp_dbg("pico returned error %d\n", -pico_err);
-			ret = 0 - pico_err;
+			ret = -pico_err;
 			goto quit;
 		}
 
@@ -767,6 +762,9 @@ static int picotcp_recvmsg_stream(struct socket *sock, struct msghdr *msg, size_
 			if (tot_len > 0)
 				goto recv_success;
 		}
+
+		if (tot_len)
+			goto recv_success;
 
 		if (flags & MSG_DONTWAIT) {
 			if (tot_len > 0)
@@ -878,7 +876,7 @@ static int picotcp_recvmsg_dgram(struct socket *sock, struct msghdr *msg, size_t
 	uint16_t             port;
 	int                  ret;
 
-	picotcp_dbg("enter picotcp_recvmsg_dgram(%p, %lx) len=%ld flags=%x\n", psk, (unsigned long)psk->pico, len, flags);
+	picotcp_dbg("enter picotcp_recvmsg_stream(%p, %lx) len=%ld flags=%x\n", psk, (unsigned long)psk->pico, len, flags);
 
 	psk_sock_lock(psk);
 
@@ -902,33 +900,56 @@ static int picotcp_recvmsg_dgram(struct socket *sock, struct msghdr *msg, size_t
 	if (len > REM_BUFFSIZE)
 		len = REM_BUFFSIZE;
 
-	psk_stack_lock(psk);
-	//psk_events_lock(psk);
-	ret = rem_pico_socket_recvfrom_msg(psk->stack_chan, psk->pico, msg, len, &addr, &port);
-	//psk_events_unlock(psk);
-	psk_stack_unlock(psk);
-	if (ret < 0) {
-		picotcp_dbg("pico returned error %d\n", -pico_err);
-		ret = -pico_err;
-		goto quit;
-	} else {
-		if (msg->msg_name) {
-			picotcp_dbg("About to return from recvmsg. tot_len is %d\n", ret);
-			msg->msg_namelen = sizeof(struct sockaddr_in);
-			pico_addr_to_bsd(msg->msg_name, msg->msg_namelen, &addr);
-			pico_port_to_bsd(msg->msg_name, msg->msg_namelen, port);
-			picotcp_dbg(
-					"Address is copied to msg(%p). msg->name is at %p, namelen is %d. Content: family=%04x - addr: %08x \n",
-					msg, msg->msg_name, msg->msg_namelen,
-					((struct sockaddr_in *) msg->msg_name)->sin_family,
-					((struct sockaddr_in *) msg->msg_name)->sin_addr.s_addr);
+	while (true) {
+		uint16_t ev;
+
+		psk_stack_lock(psk);
+		//psk_events_lock(psk);
+		ret = rem_pico_socket_recvfrom_msg(psk->stack_chan, psk->pico, msg, len,
+				&addr, &port);
+		//psk_events_unlock(psk);
+		psk_stack_unlock(psk);
+		if (ret < 0) {
+			picotcp_dbg("pico returned error %d\n", -pico_err);
+			ret = -pico_err;
+			goto quit;
+		}
+
+		pico_event_clear(psk, PICO_SOCK_EV_RD);
+		pico_event_clear(psk, PICO_SOCK_EV_ERR);
+
+		if (ret)
+			break;
+
+		if (flags & MSG_DONTWAIT) {
+			ret = -EWOULDBLOCK;
+			goto quit;
+		}
+
+		ev = pico_bsd_wait(psk, 1, 0, 1);
+		if ((ev & (PICO_SOCK_EV_ERR | PICO_SOCK_EV_FIN | PICO_SOCK_EV_CLOSE))
+				|| (ev == 0)) {
+			//adi: next read cleans it
+			//pico_event_clear(psk, PICO_SOCK_EV_RD);
+			pico_event_clear(psk, PICO_SOCK_EV_ERR);
+			ret = -EINTR;
+			goto quit;
 		}
 	}
 
-quit:
+	if (msg->msg_name) {
+		picotcp_dbg("About to return from recvmsg. tot_len is %d\n", tot_len);
+		msg->msg_namelen = sizeof(struct sockaddr_in);
+		pico_addr_to_bsd(msg->msg_name, msg->msg_namelen, &addr);
+		pico_port_to_bsd(msg->msg_name, msg->msg_namelen, port);
+		picotcp_dbg(
+				"Address is copied to msg(%p). msg->name is at %p, namelen is %d. Content: family=%04x - addr: %08x \n",
+				msg, msg->msg_name, msg->msg_namelen,
+				((struct sockaddr_in *) msg->msg_name)->sin_family,
+				((struct sockaddr_in *) msg->msg_name)->sin_addr.s_addr);
+	}
 
-	pico_event_clear(psk, PICO_SOCK_EV_RD);
-	pico_event_clear(psk, PICO_SOCK_EV_ERR);
+quit:
 
 	psk_sock_unlock(psk);
 
