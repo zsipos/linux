@@ -1,11 +1,11 @@
 #include "picotcp.h"
 #include "iprcchan.h"
-
 #include "remcalls.h"
 
 volatile pico_err_t pico_err;
 
-static iprcchan_t *chan = NULL;
+static iprcchan_t *chan0 = NULL;
+static iprcchan_t *chan1 = NULL;
 
 static void handle_remcb_pico_socket_event(void *cb_data, remcb_arg_t *arg)
 {
@@ -38,21 +38,42 @@ static void do_call(iprcchan_t *chan)
 
 int rem_init(void (*eventfunc)(uint16_t ev, void *s, void *priv))
 {
-	chan = iprcchan_open(0, iprcchan_callback, eventfunc);
-	if (!chan)
+	chan0 = iprcchan_open(0, iprcchan_callback, eventfunc);
+	if (!chan0)
 		return -ENOMEM;
+	chan1 = iprcchan_open(1, iprcchan_callback, eventfunc);
+	if (!chan1) {
+		iprcchan_close(chan0);
+		chan0 = NULL;
+		return -ENOMEM;
+	}
 	return 0;
 }
 
 void rem_deinit(void)
 {
-	if (chan) {
-		iprcchan_close(chan);
-		chan = NULL;
+	if (chan0) {
+		iprcchan_close(chan0);
+		chan0 = NULL;
+	}
+	if (chan1) {
+		iprcchan_close(chan1);
+		chan1 = NULL;
 	}
 }
 
-void rem_stack_lock(void)
+iprcchan_t *rem_get_chan(int nr)
+{
+	switch(nr) {
+	case 0:
+		return chan0;
+	case 1:
+		return chan1;
+	default:
+		return NULL;
+	}
+}
+void rem_stack_lock(iprcchan_t *chan)
 {
 	rem_arg_t *arg;
 
@@ -62,7 +83,7 @@ void rem_stack_lock(void)
 	iprcchan_end_call(chan);
 }
 
-void rem_stack_unlock(void)
+void rem_stack_unlock(iprcchan_t *chan)
 {
 	rem_arg_t *arg;
 
@@ -72,7 +93,7 @@ void rem_stack_unlock(void)
 	iprcchan_end_call(chan);
 }
 
-void rem_set_priv(rem_pico_socket_t *s, void *priv)
+void rem_set_priv(iprcchan_t *chan, rem_pico_socket_t *s, void *priv)
 {
 	rem_arg_t          *arg = iprcchan_begin_call(chan);
 	rem_set_priv_arg_t *a = &arg->u.rem_set_priv_arg;
@@ -84,7 +105,7 @@ void rem_set_priv(rem_pico_socket_t *s, void *priv)
 	iprcchan_end_call(chan);
 }
 
-int rem_get_devices(pico_devices_t *devices)
+int rem_get_devices(iprcchan_t *chan, pico_devices_t *devices)
 {
 	rem_arg_t             *arg = iprcchan_begin_call(chan);
 	rem_res_t             *res = (rem_res_t*)arg;
@@ -99,7 +120,7 @@ int rem_get_devices(pico_devices_t *devices)
 	return retval;
 }
 
-int rem_get_device_config(const char *name, pico_device_config_t *config)
+int rem_get_device_config(iprcchan_t *chan, const char *name, pico_device_config_t *config)
 {
 	rem_arg_t                   *arg = iprcchan_begin_call(chan);
 	rem_res_t                   *res = (rem_res_t*)arg;
@@ -117,7 +138,7 @@ int rem_get_device_config(const char *name, pico_device_config_t *config)
 	return retval;
 }
 
-int rem_set_device_address(const char *name, union pico_address *address, union pico_address *netmask)
+int rem_set_device_address(iprcchan_t *chan, const char *name, union pico_address *address, union pico_address *netmask)
 {
 	rem_arg_t                    *arg = iprcchan_begin_call(chan);
 	rem_res_t                    *res = (rem_res_t*)arg;
@@ -136,7 +157,7 @@ int rem_set_device_address(const char *name, union pico_address *address, union 
 	return retval;
 }
 
-int rem_device_down(const char *name)
+int rem_device_down(iprcchan_t *chan, const char *name)
 {
 	rem_arg_t             *arg = iprcchan_begin_call(chan);
 	rem_res_t             *res = (rem_res_t*)arg;
@@ -153,7 +174,8 @@ int rem_device_down(const char *name)
 	return retval;
 }
 
-int rem_device_addroute(const char         *name,
+int rem_device_addroute(iprcchan_t         *chan,
+		                const char         *name,
 						union pico_address *address,
 						union pico_address *genmask,
 						union pico_address *gateway,
@@ -178,7 +200,7 @@ int rem_device_addroute(const char         *name,
 	return retval;
 }
 
-int rem_get_routes(pico_routes_t *routes)
+int rem_get_routes(iprcchan_t *chan, pico_routes_t *routes)
 {
 	rem_arg_t            *arg = iprcchan_begin_call(chan);
 	rem_res_t            *res = (rem_res_t*)arg;
@@ -193,7 +215,7 @@ int rem_get_routes(pico_routes_t *routes)
 	return retval;
 }
 
-int rem_pico_socket_shutdown(rem_pico_socket_t *s, int mode)
+int rem_pico_socket_shutdown(iprcchan_t *chan, rem_pico_socket_t *s, int mode)
 {
 	rem_arg_t                      *arg = iprcchan_begin_call(chan);
 	rem_res_t                      *res = (rem_res_t*)arg;
@@ -210,7 +232,7 @@ int rem_pico_socket_shutdown(rem_pico_socket_t *s, int mode)
 	return retval;
 }
 
-int rem_pico_socket_connect(rem_pico_socket_t *s, const union pico_address *srv_addr, uint16_t remote_port)
+int rem_pico_socket_connect(iprcchan_t *chan, rem_pico_socket_t *s, const union pico_address *srv_addr, uint16_t remote_port)
 {
 	rem_arg_t                     *arg = iprcchan_begin_call(chan);
 	rem_res_t                     *res = (rem_res_t*)arg;
@@ -229,7 +251,7 @@ int rem_pico_socket_connect(rem_pico_socket_t *s, const union pico_address *srv_
 	return retval;
 }
 
-int rem_pico_socket_close(rem_pico_socket_t *s)
+int rem_pico_socket_close(iprcchan_t *chan, rem_pico_socket_t *s)
 {
 	rem_arg_t                   *arg = iprcchan_begin_call(chan);
 	rem_res_t                   *res = (rem_res_t*)arg;
@@ -246,7 +268,7 @@ int rem_pico_socket_close(rem_pico_socket_t *s)
 	return retval;
 }
 
-int rem_pico_socket_bind(rem_pico_socket_t *s, union pico_address *local_addr, uint16_t *port)
+int rem_pico_socket_bind(iprcchan_t *chan, rem_pico_socket_t *s, union pico_address *local_addr, uint16_t *port)
 {
 	rem_arg_t                  *arg = iprcchan_begin_call(chan);
 	rem_res_t                  *res = (rem_res_t*)arg;
@@ -266,7 +288,7 @@ int rem_pico_socket_bind(rem_pico_socket_t *s, union pico_address *local_addr, u
 	return retval;
 }
 
-int rem_pico_socket_getname(rem_pico_socket_t *s, union pico_address *local_addr, uint16_t *port, uint16_t *proto, int peer)
+int rem_pico_socket_getname(iprcchan_t *chan, rem_pico_socket_t *s, union pico_address *local_addr, uint16_t *port, uint16_t *proto, int peer)
 {
 	rem_arg_t                     *arg = iprcchan_begin_call(chan);
 	rem_res_t                     *res = (rem_res_t*)arg;
@@ -287,7 +309,7 @@ int rem_pico_socket_getname(rem_pico_socket_t *s, union pico_address *local_addr
 	return retval;
 }
 
-rem_pico_socket_t *rem_pico_socket_accept(rem_pico_socket_t *s, union pico_address *orig, uint16_t *port)
+rem_pico_socket_t *rem_pico_socket_accept(iprcchan_t *chan, rem_pico_socket_t *s, union pico_address *orig, uint16_t *port)
 {
 	rem_arg_t                    *arg = iprcchan_begin_call(chan);
 	rem_res_t                    *res = (rem_res_t*)arg;
@@ -306,7 +328,7 @@ rem_pico_socket_t *rem_pico_socket_accept(rem_pico_socket_t *s, union pico_addre
 	return retval;
 }
 
-int rem_pico_socket_listen(rem_pico_socket_t *s, const int backlog)
+int rem_pico_socket_listen(iprcchan_t *chan, rem_pico_socket_t *s, const int backlog)
 {
 	rem_arg_t                     *arg = iprcchan_begin_call(chan);
 	rem_res_t                     *res = (rem_res_t*)arg;
@@ -324,7 +346,7 @@ int rem_pico_socket_listen(rem_pico_socket_t *s, const int backlog)
 	return retval;
 }
 
-int rem_pico_socket_sendto(rem_pico_socket_t *s, const void *buf, int len, union pico_address *dst, uint16_t remote_port)
+int rem_pico_socket_sendto(iprcchan_t *chan, rem_pico_socket_t *s, const void *buf, int len, union pico_address *dst, uint16_t remote_port)
 {
 	rem_arg_t                    *arg = iprcchan_begin_call(chan);
 	rem_res_t                    *res = (rem_res_t*)arg;
@@ -349,7 +371,33 @@ int rem_pico_socket_sendto(rem_pico_socket_t *s, const void *buf, int len, union
 	return retval;
 }
 
-int rem_pico_socket_send(rem_pico_socket_t *s, const void *buf, int len)
+int rem_pico_socket_sendto_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct msghdr *msg, int len, union pico_address *dst, uint16_t remote_port)
+{
+	rem_arg_t                    *arg = iprcchan_begin_call(chan);
+	rem_res_t                    *res = (rem_res_t*)arg;
+	rem_pico_socket_sendto_arg_t *a = &arg->u.rem_pico_socket_sendto_arg;
+	rem_pico_socket_sendto_res_t *r = &res->u.rem_pico_socket_sendto_res;
+	int                           retval;
+
+	if (len > REM_BUFFSIZE)
+		len = REM_BUFFSIZE;
+	else if (len < 0)
+		len = 0;
+	arg->hdr.func  = f_rem_pico_socket_sendto;
+	a->s           = s;
+	a->len         = len;
+	a->dst         = *dst;
+	a->remote_port = remote_port;
+	if (memcpy_from_msg(&a->buf[0], msg, len) >= 0) {
+		do_call(chan);
+		pico_err = res->hdr.pico_err;
+		retval   = r->retval;
+	}
+	iprcchan_end_call(chan);
+	return retval;
+}
+
+int rem_pico_socket_send(iprcchan_t *chan, rem_pico_socket_t *s, const void *buf, int len)
 {
 	rem_arg_t                  *arg = iprcchan_begin_call(chan);
 	rem_res_t                  *res = (rem_res_t*)arg;
@@ -372,7 +420,32 @@ int rem_pico_socket_send(rem_pico_socket_t *s, const void *buf, int len)
 	return retval;
 }
 
-int rem_pico_socket_recvfrom(rem_pico_socket_t *s, void *buf, int len, union pico_address *orig, uint16_t *local_port)
+int rem_pico_socket_send_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct msghdr *msg, int len)
+{
+	rem_arg_t                  *arg = iprcchan_begin_call(chan);
+	rem_res_t                  *res = (rem_res_t*)arg;
+	rem_pico_socket_send_arg_t *a = &arg->u.rem_pico_socket_send_arg;
+	rem_pico_socket_send_res_t *r = &res->u.rem_pico_socket_send_res;
+	int                         retval;
+
+	if (len > REM_BUFFSIZE)
+		len = REM_BUFFSIZE;
+	else if (len < 0)
+		len = 0;
+	arg->hdr.func  = f_rem_pico_socket_send;
+	a->s           = s;
+	a->len         = len;
+	retval = memcpy_from_msg(&a->buf[0], msg, len);
+	if (retval >= 0) {
+		do_call(chan);
+		pico_err = res->hdr.pico_err;
+		retval   = r->retval;
+	}
+	iprcchan_end_call(chan);
+	return retval;
+}
+
+int rem_pico_socket_recvfrom(iprcchan_t *chan, rem_pico_socket_t *s, void *buf, int len, union pico_address *orig, uint16_t *local_port)
 {
 	rem_arg_t                      *arg = iprcchan_begin_call(chan);
 	rem_res_t                      *res = (rem_res_t*)arg;
@@ -398,7 +471,34 @@ int rem_pico_socket_recvfrom(rem_pico_socket_t *s, void *buf, int len, union pic
 	return retval;
 }
 
-rem_pico_socket_t *rem_pico_socket_open(uint16_t net, uint16_t proto)
+int rem_pico_socket_recvfrom_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct msghdr *msg, int len, union pico_address *orig, uint16_t *local_port)
+{
+	rem_arg_t                      *arg = iprcchan_begin_call(chan);
+	rem_res_t                      *res = (rem_res_t*)arg;
+	rem_pico_socket_recvfrom_arg_t *a = &arg->u.rem_pico_socket_recvfrom_arg;
+	rem_pico_socket_recvfrom_res_t *r = &res->u.rem_pico_socket_recvfrom_res;
+	int                             retval;
+
+	if (len > REM_BUFFSIZE)
+		len = REM_BUFFSIZE;
+	else if (len < 0)
+		len = 0;
+	arg->hdr.func = f_rem_pico_socket_recvfrom;
+	a->s          = s;
+	a->len        = len;
+	do_call(chan);
+	pico_err    = res->hdr.pico_err;
+	retval      = r->retval;
+	*orig       = r->orig;
+	*local_port = r->local_port;
+	if (retval > 0) {
+		memcpy_to_msg(msg, &r->buf[0], retval);
+	}
+	iprcchan_end_call(chan);
+	return retval;
+}
+
+rem_pico_socket_t *rem_pico_socket_open(iprcchan_t *chan, uint16_t net, uint16_t proto)
 {
 	rem_arg_t                  *arg = iprcchan_begin_call(chan);
 	rem_res_t                  *res = (rem_res_t*)arg;
@@ -416,7 +516,7 @@ rem_pico_socket_t *rem_pico_socket_open(uint16_t net, uint16_t proto)
 	return retval;
 }
 
-int rem_pico_socket_getoption(rem_pico_socket_t *s, int option, void *value, int *optlen)
+int rem_pico_socket_getoption(iprcchan_t *chan, rem_pico_socket_t *s, int option, void *value, int *optlen)
 {
 	rem_arg_t                       *arg = iprcchan_begin_call(chan);
 	rem_res_t                       *res = (rem_res_t*)arg;
@@ -442,7 +542,7 @@ int rem_pico_socket_getoption(rem_pico_socket_t *s, int option, void *value, int
 	return retval;
 }
 
-int rem_pico_socket_setoption(rem_pico_socket_t *s, int option, void *value, int optlen)
+int rem_pico_socket_setoption(iprcchan_t *chan, rem_pico_socket_t *s, int option, void *value, int optlen)
 {
 	rem_arg_t                       *arg = iprcchan_begin_call(chan);
 	rem_res_t                       *res = (rem_res_t*)arg;

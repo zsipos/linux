@@ -1,6 +1,7 @@
 #include <linux/proc_fs.h>
 
 #include "picotcp.h"
+#include "iprcchan.h"
 #include "remcalls.h"
 
 static int stack_proc_show(struct seq_file *m, void *v)
@@ -15,7 +16,7 @@ static int route_proc_show(struct seq_file *m, void *v)
 	int            i;
 
 	seq_printf(m, "Iface\tDestination\tGateway\t\tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n");
-	rem_get_routes(&routes);
+	rem_get_routes(rem_get_chan(0), &routes);
 	for (i = 0; i < routes.count; i++) {
 		pico_route_t *r = &routes.routes[i];
 		seq_printf(m, "%s\t%08X\t%08X\t%04X\t0\t0\t%d\t%08X\t0\t0\t0\n",

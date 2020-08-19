@@ -1,8 +1,19 @@
 #include "picotcp.h"
+#include "iprcchan.h"
 #include "remcalls.h"
 
 #define ioctl_debug(...) do{}while(0)
 //#define ioctl_debug printk
+
+static iprcchan_t *get_chan(char *name)
+{
+	if (strcmp(name, "eth0") == 0)
+		return rem_get_chan(0);
+	if (strcmp(name, "lo") == 0)
+		return rem_get_chan(0);
+	else
+		return rem_get_chan(1);
+}
 
 static int picotcp_iosgaddr(struct socket *sock, unsigned int cmd, unsigned long arg, int set)
 {
@@ -12,7 +23,7 @@ static int picotcp_iosgaddr(struct socket *sock, unsigned int cmd, unsigned long
 
 	if (copy_from_user(ifr, (void*)arg, sizeof(struct ifreq)))
 		return -EFAULT;
-	if (rem_get_device_config(ifr->ifr_name, &config) < 0)
+	if (rem_get_device_config(get_chan(ifr->ifr_name), ifr->ifr_name, &config) < 0)
 		return -ENOENT;
 
 	addr = (struct sockaddr_in *) &ifr->ifr_addr;
@@ -27,7 +38,7 @@ static int picotcp_iosgaddr(struct socket *sock, unsigned int cmd, unsigned long
 		else
 			pico_netmask.ip4.addr = htonl(0xffffff00); // default to 24 bit netmask
 
-		return rem_set_device_address(config.name, &pico_address, &pico_netmask);
+		return rem_set_device_address(get_chan(ifr->ifr_name), config.name, &pico_address, &pico_netmask);
 	}
 
 	addr->sin_family = AF_INET;
@@ -49,7 +60,7 @@ static int picotcp_iosgbrd(struct socket *sock, unsigned int cmd, unsigned long 
 
 	if (copy_from_user(ifr, (void*)arg, sizeof(struct ifreq)))
 		return -EFAULT;
-	if (rem_get_device_config(ifr->ifr_name, &config) < 0)
+	if (rem_get_device_config(get_chan(ifr->ifr_name), ifr->ifr_name, &config) < 0)
 		return -ENOENT;
 
 	if (set)
@@ -76,7 +87,7 @@ static int picotcp_iosgmask(struct socket *sock, unsigned int cmd, unsigned long
 
 	if (copy_from_user(ifr, (void*)arg, sizeof(struct ifreq)))
 		return -EFAULT;
-	if (rem_get_device_config(ifr->ifr_name, &config) < 0)
+	if (rem_get_device_config(get_chan(ifr->ifr_name), ifr->ifr_name, &config) < 0)
 		return -ENOENT;
 
 	if (!config.hasipv4link)
@@ -88,7 +99,7 @@ static int picotcp_iosgmask(struct socket *sock, unsigned int cmd, unsigned long
 		union pico_address pico_netmask;
 
 		pico_netmask.ip4.addr = addr->sin_addr.s_addr;
-		return rem_set_device_address(config.name, &config.address, &pico_netmask);
+		return rem_set_device_address(get_chan(ifr->ifr_name), config.name, &config.address, &pico_netmask);
 	}
 
 	addr->sin_family = AF_INET;
@@ -109,12 +120,12 @@ static int picotcp_iosgflags(struct socket *sock, unsigned int cmd, unsigned lon
 
 	if (copy_from_user(ifr, (void*)arg, sizeof(struct ifreq)))
 		return -EFAULT;
-	if (rem_get_device_config(ifr->ifr_name, &config) < 0)
+	if (rem_get_device_config(get_chan(ifr->ifr_name), ifr->ifr_name, &config) < 0)
 		return -ENOENT;
 
 	/* Set flags: we only care about UP flag being reset */
 	if (set && ((ifr->ifr_flags & IFF_UP) == 0)) {
-		return rem_device_down(config.name);
+		return rem_device_down(get_chan(ifr->ifr_name), config.name);
 	}
 
 	ifr->ifr_flags = IFF_BROADCAST | IFF_MULTICAST;
@@ -135,7 +146,7 @@ static int picotcp_iosgmac(struct socket *sock, unsigned int cmd, unsigned long 
 
 	if (copy_from_user(ifr, (void*)arg, sizeof(struct ifreq)))
 		return -EFAULT;
-	if (rem_get_device_config(ifr->ifr_name, &config) < 0)
+	if (rem_get_device_config(get_chan(ifr->ifr_name), ifr->ifr_name, &config) < 0)
 		return -ENOENT;
 
 	if (set)
@@ -165,7 +176,7 @@ static int picotcp_iosgmtu(struct socket *sock, unsigned int cmd, unsigned long 
 
 	if (copy_from_user(ifr, (void*)arg, sizeof(struct ifreq)))
 		return -EFAULT;
-	if (rem_get_device_config(ifr->ifr_name, &config) < 0)
+	if (rem_get_device_config(get_chan(ifr->ifr_name), ifr->ifr_name, &config) < 0)
 		return -ENOENT;
 
 	if (set)
@@ -178,14 +189,14 @@ static int picotcp_iosgmtu(struct socket *sock, unsigned int cmd, unsigned long 
 	return 0;
 }
 
-static int picodev_to_ifreq(const char *ifname, struct ifreq *ifr)
+static int picodev_to_ifreq(iprcchan_t *chan, const char *ifname, struct ifreq *ifr)
 {
 	pico_device_config_t  config;
 	struct sockaddr_in   *addr = (struct sockaddr_in *) &ifr->ifr_addr;
 
 	if (!ifr)
 		return -1;
-	if (rem_get_device_config(ifname, &config) < 0)
+	if (rem_get_device_config(chan, ifname, &config) < 0)
 		return -1;
 
 	memset(ifr, 0, sizeof(struct ifreq));
@@ -202,14 +213,19 @@ static int picodev_to_ifreq(const char *ifname, struct ifreq *ifr)
 
 static int picotcp_gifconf(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
-	struct ifconf  _ifc, *ifc = &_ifc;
-	pico_devices_t devices;
-	int            i, count, size = 0;
+	struct ifconf   _ifc, *ifc = &_ifc;
+	iprcchan_t     *chan;
+	pico_devices_t  devices;
+	int             i, count, size = 0;
 
 	if (copy_from_user(ifc, (void*)arg, sizeof(struct ifconf)))
 		return -EFAULT;
 
-	if (rem_get_devices(&devices) < 0)
+	/* TODO: return devices from second stack */
+
+	chan = get_chan("eth0");
+
+	if (rem_get_devices(chan, &devices) < 0)
 		return -ENOMEM;
 
 	count = ifc->ifc_len / sizeof(struct ifreq);
@@ -219,7 +235,7 @@ static int picotcp_gifconf(struct socket *sock, unsigned int cmd, unsigned long 
 	for (i = 0; i < count; i++) {
 		struct ifreq ifr;
 
-		if (picodev_to_ifreq(devices.names[i], &ifr) < 0)
+		if (picodev_to_ifreq(chan, devices.names[i], &ifr) < 0)
 			return -EINVAL;
 		if (copy_to_user(&ifc->ifc_req[i], &ifr, sizeof(struct ifreq)))
 			return -EFAULT;
@@ -258,10 +274,11 @@ static int picotcp_addroute(struct socket *sock, unsigned int cmd, unsigned long
 		devname = "";
 
 	/* TODO: link from device name in rt_dev (u32-> *char) */
+
 	if (rte->rt_metric <= 0)
 		rte->rt_metric = 1;
 
-	return rem_device_addroute(devname, &a, &n, &g, rte->rt_metric);
+	return rem_device_addroute(get_chan("eth0"), devname, &a, &n, &g, rte->rt_metric);
 }
 
 static int picotcp_get_timestamp(struct socket *sock, unsigned long arg)

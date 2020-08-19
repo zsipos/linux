@@ -83,7 +83,7 @@ iprcchan_t *iprcchan_open(int num, void (*cb_func)(void *cb_data, void *buffer),
 	iprcchan_t    *chan = NULL;
 	struct device_node *master_node, *slave_node;
 
-	if (num > 0) {
+	if (num > 1) {
 		printk(KERN_ERR "illegal channel number %d.\n", num);
 		return NULL;
 	}

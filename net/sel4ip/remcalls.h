@@ -9,11 +9,13 @@ extern int rem_init(void (*eventfunc)(uint16_t ev, void *s, void *priv));
 
 extern void rem_deinit(void);
 
-extern void rem_stack_lock(void);
+extern iprcchan_t *rem_get_chan(int nr);
 
-extern void rem_stack_unlock(void);
+extern void rem_stack_lock(iprcchan_t *chan);
 
-extern void rem_set_priv(rem_pico_socket_t *s, void *priv);
+extern void rem_stack_unlock(iprcchan_t *chan);
+
+extern void rem_set_priv(iprcchan_t *chan, rem_pico_socket_t *s, void *priv);
 
 typedef struct rem_set_priv_arg {
 	rem_pico_socket_t *s;
@@ -57,14 +59,14 @@ typedef struct pico_routes {
 	pico_route_t routes[MAX_ROUTES];
 } pico_routes_t;
 
-extern int rem_get_devices(pico_devices_t *devices);
+extern int rem_get_devices(iprcchan_t *chan, pico_devices_t *devices);
 
 typedef struct rem_get_devices_res {
 	int            retval;
 	pico_devices_t devices;
 } rem_get_devices_res_t;
 
-extern int rem_get_device_config(const char *name, pico_device_config_t *conf);
+extern int rem_get_device_config(iprcchan_t *chan, const char *name, pico_device_config_t *conf);
 
 typedef struct rem_get_device_config_arg {
 	pico_dev_name_t name;
@@ -75,7 +77,7 @@ typedef struct rem_get_device_config_res {
 	pico_device_config_t config;
 } rem_get_device_config_res_t;
 
-extern int rem_set_device_address(const char *name, union pico_address *address, union pico_address *netmask);
+extern int rem_set_device_address(iprcchan_t *chan, const char *name, union pico_address *address, union pico_address *netmask);
 
 typedef struct rem_set_device_address_arg {
 	pico_dev_name_t    name;
@@ -87,7 +89,7 @@ typedef struct rem_set_device_address_res {
 	int retval;
 } rem_set_device_address_res_t;
 
-extern int rem_device_down(const char *name);
+extern int rem_device_down(iprcchan_t *chan, const char *name);
 
 typedef struct rem_device_down_arg {
 	pico_dev_name_t    name;
@@ -97,7 +99,8 @@ typedef struct rem_device_down_res {
 	int retval;
 } rem_device_down_res_t;
 
-extern int rem_device_addroute(const char         *name,
+extern int rem_device_addroute(iprcchan_t         *chan,
+							   const char         *name,
 		                       union pico_address *address,
 							   union pico_address *genmask,
 							   union pico_address *gateway,
@@ -115,7 +118,7 @@ typedef struct rem_device_addroute_res {
 	int retval;
 } rem_device_addroute_res_t;
 
-extern int rem_get_routes(pico_routes_t *routes);
+extern int rem_get_routes(iprcchan_t *chan, pico_routes_t *routes);
 
 typedef struct rem_get_routes_res {
 	int           retval;
@@ -125,7 +128,7 @@ typedef struct rem_get_routes_res {
 /* socket functions */
 /* YOU MUST LOCK */
 
-extern int rem_pico_socket_shutdown(rem_pico_socket_t *s, int mode);
+extern int rem_pico_socket_shutdown(iprcchan_t *chan, rem_pico_socket_t *s, int mode);
 
 typedef struct rem_pico_socket_shutdown_arg {
 	rem_pico_socket_t *s;
@@ -136,7 +139,7 @@ typedef struct rem_pico_socket_shutdown_res {
 	int retval;
 } rem_pico_socket_shutdown_res_t;
 
-extern int rem_pico_socket_connect(rem_pico_socket_t *s, const union pico_address *srv_addr, uint16_t remote_port);
+extern int rem_pico_socket_connect(iprcchan_t *chan, rem_pico_socket_t *s, const union pico_address *srv_addr, uint16_t remote_port);
 
 typedef struct rem_pico_socket_connect_arg {
 	rem_pico_socket_t  *s;
@@ -148,7 +151,7 @@ typedef struct rem_pico_socket_connect_res {
 	int retval;
 } rem_pico_socket_connect_res_t;
 
-extern int rem_pico_socket_close(rem_pico_socket_t *s);
+extern int rem_pico_socket_close(iprcchan_t *chan, rem_pico_socket_t *s);
 
 typedef struct rem_pico_socket_close_arg {
 	rem_pico_socket_t *s;
@@ -158,7 +161,7 @@ typedef struct rem_pico_socket_close_res {
 	int retval;
 } rem_pico_socket_close_res_t;
 
-extern int rem_pico_socket_bind(rem_pico_socket_t *s, union pico_address *local_addr, uint16_t *port);
+extern int rem_pico_socket_bind(iprcchan_t *chan, rem_pico_socket_t *s, union pico_address *local_addr, uint16_t *port);
 
 typedef struct rem_pico_socket_bind_arg {
 	rem_pico_socket_t  *s;
@@ -171,7 +174,7 @@ typedef struct rem_pico_socket_bind_res {
 	uint16_t port;
 } rem_pico_socket_bind_res_t;
 
-extern int rem_pico_socket_getname(rem_pico_socket_t *s, union pico_address *local_addr, uint16_t *port, uint16_t *proto, int peer);
+extern int rem_pico_socket_getname(iprcchan_t *chan, rem_pico_socket_t *s, union pico_address *local_addr, uint16_t *port, uint16_t *proto, int peer);
 
 typedef struct rem_pico_socket_getname_arg {
 	rem_pico_socket_t  *s;
@@ -185,7 +188,7 @@ typedef struct rem_pico_socket_getname_res {
 	uint16_t           proto;
 } rem_pico_socket_getname_res_t;
 
-extern rem_pico_socket_t *rem_pico_socket_accept(rem_pico_socket_t *s, union pico_address *orig, uint16_t *port);
+extern rem_pico_socket_t *rem_pico_socket_accept(iprcchan_t *chan, rem_pico_socket_t *s, union pico_address *orig, uint16_t *port);
 
 typedef struct rem_pico_socket_accept_arg {
 	rem_pico_socket_t  *s;
@@ -197,7 +200,7 @@ typedef struct rem_pico_socket_accept_res {
 	uint16_t            port;
 } rem_pico_socket_accept_res_t;
 
-extern int rem_pico_socket_listen(rem_pico_socket_t *s, const int backlog);
+extern int rem_pico_socket_listen(iprcchan_t *chan, rem_pico_socket_t *s, const int backlog);
 
 typedef struct rem_pico_socket_listen_arg {
 	rem_pico_socket_t *s;
@@ -208,7 +211,7 @@ typedef struct rem_pico_socket_listen_res {
 	int retval;
 } rem_pico_socket_listen_res_t;
 
-extern int rem_pico_socket_sendto(rem_pico_socket_t *s, const void *buf, int len, union pico_address *dst, uint16_t remote_port);
+extern int rem_pico_socket_sendto(iprcchan_t *chan, rem_pico_socket_t *s, const void *buf, int len, union pico_address *dst, uint16_t remote_port);
 
 typedef struct rem_pico_socket_sendto_arg {
 	rem_pico_socket_t  *s;
@@ -222,7 +225,11 @@ typedef struct rem_pico_socket_sendto_res {
 	int retval;
 } rem_pico_socket_sendto_res_t;
 
-extern int rem_pico_socket_send(rem_pico_socket_t *s, const void *buf, int len);
+struct msghdr;
+
+extern int rem_pico_socket_sendto_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct msghdr *msg, int len, union pico_address *dst, uint16_t remote_port);
+
+extern int rem_pico_socket_send(iprcchan_t *chan, rem_pico_socket_t *s, const void *buf, int len);
 
 typedef struct rem_pico_socket_send_arg {
 	rem_pico_socket_t  *s;
@@ -234,7 +241,9 @@ typedef struct rem_pico_socket_send_res {
 	int retval;
 } rem_pico_socket_send_res_t;
 
-extern int rem_pico_socket_recvfrom(rem_pico_socket_t *s, void *buf, int len, union pico_address *orig, uint16_t *local_port);
+extern int rem_pico_socket_send_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct msghdr *msg, int len);
+
+extern int rem_pico_socket_recvfrom(iprcchan_t *chan, rem_pico_socket_t *s, void *buf, int len, union pico_address *orig, uint16_t *local_port);
 
 typedef struct rem_pico_socket_recvfrom_arg {
 	rem_pico_socket_t *s;
@@ -248,7 +257,9 @@ typedef struct rem_pico_socket_recvfrom_res {
 	char               buf[1];
 } rem_pico_socket_recvfrom_res_t;
 
-extern rem_pico_socket_t *rem_pico_socket_open(uint16_t net, uint16_t proto);
+extern int rem_pico_socket_recvfrom_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct msghdr *msg, int len, union pico_address *orig, uint16_t *local_port);
+
+extern rem_pico_socket_t *rem_pico_socket_open(iprcchan_t *chan, uint16_t net, uint16_t proto);
 
 typedef struct rem_pico_socket_open_arg {
 	uint16_t   net;
@@ -259,7 +270,7 @@ typedef struct rem_pico_socket_open_res {
 	rem_pico_socket_t *retval;
 } rem_pico_socket_open_res_t;
 
-extern int rem_pico_socket_getoption(rem_pico_socket_t *s, int option, void *value, int *optlen);
+extern int rem_pico_socket_getoption(iprcchan_t *chan, rem_pico_socket_t *s, int option, void *value, int *optlen);
 
 typedef struct rem_pico_socket_getoption_arg {
 	rem_pico_socket_t *s;
@@ -273,7 +284,7 @@ typedef struct rem_pico_socket_getoption_res {
 	char               value[1];
 } rem_pico_socket_getoption_res_t;
 
-extern int rem_pico_socket_setoption(rem_pico_socket_t *s, int option, void *value, int optlen);
+extern int rem_pico_socket_setoption(iprcchan_t *chan, rem_pico_socket_t *s, int option, void *value, int optlen);
 
 typedef struct rem_pico_socket_setoption_arg {
 	rem_pico_socket_t *s;
