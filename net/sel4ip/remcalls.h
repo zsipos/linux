@@ -1,6 +1,8 @@
 #ifndef _H_REMCALLS_H
 #define _H_REMCALLS_H
 
+#define MINLOCK
+
 #define REM_BUFFSIZE 3072
 
 typedef struct rem_pico_socket rem_pico_socket_t;
