@@ -281,11 +281,13 @@ static void picotcp_socket_event(uint16_t ev, void *s, void *priv)
 		return;
 	}
 
+#if 0 // ???
 	if (psk->sk.sk_err) {
 		picotcp_dbg("psk->sk.sk_err\n");
 		printk("sk_err\n");
 		ev = PICO_SOCK_EV_ERR | (psk->sk.sk_err << 8);
 	}
+#endif
 
 	if (!psk->in_use) {
 		picotcp_dbg("!psk->in_use\n");
@@ -310,7 +312,8 @@ static void picotcp_socket_event(uint16_t ev, void *s, void *priv)
 	}
 
 	if (ev & PICO_SOCK_EV_ERR) {
-		printk("EV_ERR\n");
+		printk("EV_ERR, pico_err=%d\n", pico_err);
+		//psk->sk.sk_err = pico_err;
 		if (pico_err == PICO_ERR_ECONNRESET) {
 			dbg("Connection reset...\n");
 			psk->state = SOCK_RESET_BY_PEER;
@@ -346,8 +349,6 @@ static void pico_event_clear(struct picotcp_sock *psk, uint16_t events)
 	if (is_udp(psk) && (events & PICO_SOCK_EV_RD)) {
 		if (psk->udpcnt)
 			psk->udpcnt--;
-		if (psk->udpcnt < 0)
-			printk("oops: pico_event_clear(): udcnt < 0\n");
 		if (psk->udpcnt)
 			psk->revents |= PICO_SOCK_EV_RD;
 	}
@@ -389,7 +390,7 @@ static int picotcp_connect(struct socket *sock, struct sockaddr *_saddr, int soc
 	if (err) {
 		picotcp_dbg("port=%d\n", port);
 		picotcp_dbg("connect failed\n");
-		ret = 0 - pico_err;
+		ret = -pico_err;
 		goto quit;
 	}
 
@@ -404,6 +405,10 @@ static int picotcp_connect(struct socket *sock, struct sockaddr *_saddr, int soc
 		picotcp_dbg("MSG_DONTWAIT\n");
 		ret = -EWOULDBLOCK;
 		goto quit;
+	} else if (flags & O_NONBLOCK) {
+		picotcp_dbg("O_NONBLOCK\n");
+		ret = -EINPROGRESS;
+		goto quit;
 	} else {
 		/* wait for event */
 		ev = pico_bsd_wait(psk, 0, 0, 0); /* wait for ERR, FIN and CONN */
@@ -414,17 +419,9 @@ static int picotcp_connect(struct socket *sock, struct sockaddr *_saddr, int soc
 		pico_event_clear(psk, PICO_SOCK_EV_CONN);
 		ret = 0;
 		goto quit;
+	} else if (ev & PICO_SOCK_EV_ERR) {
+		ret = -ECONNREFUSED;
 	} else {
-		psk_stack_lock(psk);
-#ifdef MINLOCK
-		rem_stack_lock(psk->stack_chan);
-#endif
-		rem_pico_socket_close(psk->stack_chan, psk->pico);
-		psk->in_use = 0;
-#ifdef MINLOCK
-		rem_stack_unlock(psk->stack_chan);
-#endif
-		psk_stack_unlock(psk);
 		ret = -EINTR;
 	}
 
@@ -461,7 +458,7 @@ static int picotcp_bind(struct socket *sock, struct sockaddr *local_addr, int so
 	if (rem_pico_socket_bind(psk->stack_chan, psk->pico, &addr, &port) < 0) {
 		psk_stack_unlock(psk);
 		picotcp_dbg("bind: failed\n");
-		ret =  0 - pico_err;
+		ret =  -pico_err;
 		goto quit;
 	}
 	psk->state = SOCK_BOUND;
@@ -575,7 +572,7 @@ static int picotcp_accept(struct socket *sock, struct socket *newsock, int flags
 		//psk_events_unlock(psk);
 		if (!ps) {
 			psk_stack_unlock(psk);
-			ret = 0 - pico_err;
+			ret = -pico_err;
 			goto quit;
 		}
 		pico_event_clear(psk, PICO_SOCK_EV_CONN); /* clear the CONN event the listening socket */
@@ -632,7 +629,7 @@ static int picotcp_listen(struct socket *sock, int backlog)
 	err = rem_pico_socket_listen(psk->stack_chan, psk->pico, backlog);
 
 	if (err) {
-		ret = 0 - pico_err;
+		ret = -pico_err;
 	} else {
 		psk->state = SOCK_LISTEN;
 		sk->sk_state = TCP_LISTEN;
@@ -691,7 +688,7 @@ static int picotcp_sendmsg_stream(struct socket *sock, struct msghdr *msg, size_
 		//psk_events_unlock(psk);
 		psk_stack_unlock(psk);
 		if (r < 0) {
-			ret = 0 - pico_err;
+			ret = -pico_err;
 			goto quit;
 		}
 
@@ -1290,7 +1287,7 @@ static int picotcp_create(struct net *net, struct socket *sock, int protocol, in
 
 	ps = rem_pico_socket_open(stack_chan, PICO_PROTO_IPV4, protocol);
 	if (!ps) {
-		ret = 0 - pico_err;
+		ret = -pico_err;
 		goto quit;
 	}
 
