@@ -409,9 +409,10 @@ typedef struct remcb_arg_hdr {
 } remcb_arg_hdr_t;
 
 typedef struct remcb_pico_socket_event_arg {
-	uint16_t   ev;
-	void      *s;
-	void      *priv;
+	uint16_t    ev;
+	void       *s;
+	void       *priv;
+	pico_err_t  err;
 } remcb_pico_socket_event_arg_t;
 
 typedef struct remcb_arg {

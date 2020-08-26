@@ -12,6 +12,8 @@ static void handle_remcb_pico_socket_event(void *cb_data, remcb_arg_t *arg)
 	remcb_pico_socket_event_arg_t *a = &arg->u.remcb_pico_socket_event_arg;
 	void (*eventfunc)(uint16_t ev, void *s, void *priv) = cb_data;
 
+	pico_err = a->err;
+
 	eventfunc(a->ev, a->s, a->priv);
 }
 
