@@ -246,17 +246,6 @@ static unsigned int picotcp_poll(struct file *file, struct socket *sock, poll_ta
 	/* Addendum: UDP can always write, by default... */
 	if (is_udp(psk))
 		mask |= EPOLLOUT | EPOLLWRNORM; // | EPOLLWRBAND;
-
-#if 0
-	if (is_udp(psk)) {
-		psk_stack_lock(psk);
-		if (rem_pico_socket_udp_poll(psk->stack_chan, psk->pico) > 0) {
-			mask |= EPOLLIN | EPOLLRDNORM;
-		}
-		psk_stack_unlock(psk);
-	}
-#endif
-
 	psk_events_unlock(psk);
 
 #if PICOTCP_DEBUG_POLL
@@ -272,7 +261,20 @@ static void picotcp_socket_event(uint16_t ev, void *s, void *priv)
 
 #if PICOTCP_DEBUG_EVENTS
 	picotcp_dbg("enter picotcp_socket_event(%p,%lx)\n", priv, (unsigned long)s);
-	picotcp_dbg("event=%x\n", ev);
+	picotcp_dbg(KERN_CONT "event=%x ", ev);
+	if (ev & PICO_SOCK_EV_CONN)
+		picotcp_dbg(KERN_CONT " CONN");
+	if (ev & PICO_SOCK_EV_ERR)
+		picotcp_dbg(KERN_CONT " ERR");
+	if (ev & PICO_SOCK_EV_CLOSE)
+		picotcp_dbg(KERN_CONT " CLOSE");
+	if (ev & PICO_SOCK_EV_FIN)
+		picotcp_dbg(KERN_CONT " FIN");
+	if (ev & PICO_SOCK_EV_RD)
+		picotcp_dbg(KERN_CONT " RD");
+	if (ev & PICO_SOCK_EV_WR)
+		picotcp_dbg(KERN_CONT " WR");
+	picotcp_dbg("");
 #endif
 
 	if (!psk) {
@@ -402,7 +404,6 @@ static int picotcp_connect(struct socket *sock, struct sockaddr *_saddr, int soc
 	}
 
 	if (flags & MSG_DONTWAIT) {
-		picotcp_dbg("MSG_DONTWAIT\n");
 		ret = -EWOULDBLOCK;
 		goto quit;
 	} else if (flags & O_NONBLOCK) {
@@ -765,11 +766,21 @@ static int picotcp_recvmsg_stream(struct socket *sock, struct msghdr *msg, size_
 	}
 
 	while (tot_len < len) {
-		int r;
+		int r, more;
 		psk_stack_lock(psk);
+#ifdef MINLOCK
+		rem_stack_lock(psk->stack_chan);
+#endif
 		//psk_events_lock(psk);
-		r = rem_pico_socket_recvfrom(psk->stack_chan, psk->pico, kbuf + tot_len, len - tot_len, &addr, &port);
+		r = rem_pico_socket_recvfrom2(psk->stack_chan, psk->pico, kbuf + tot_len, len - tot_len, &addr, &port, false, &more);
+		if (!more) {
+			pico_event_clear(psk, PICO_SOCK_EV_RD);
+			pico_event_clear(psk, PICO_SOCK_EV_ERR);
+		}
 		//psk_events_unlock(psk);
+#ifdef MINLOCK
+		rem_stack_unlock(psk->stack_chan);
+#endif
 		psk_stack_unlock(psk);
 		if (r < 0) {
 			picotcp_dbg("pico returned error %d\n", -pico_err);
@@ -779,14 +790,7 @@ static int picotcp_recvmsg_stream(struct socket *sock, struct msghdr *msg, size_
 
 		tot_len += r;
 
-		if (r == 0) {
-			pico_event_clear(psk, PICO_SOCK_EV_RD);
-			pico_event_clear(psk, PICO_SOCK_EV_ERR);
-			if (tot_len > 0)
-				goto recv_success;
-		}
-
-		if (tot_len)
+		if ((r == 0) && (tot_len > 0))
 			goto recv_success;
 
 		if (flags & MSG_DONTWAIT) {
@@ -801,8 +805,7 @@ static int picotcp_recvmsg_stream(struct socket *sock, struct msghdr *msg, size_
 		if (tot_len < len) {
 			uint16_t ev = pico_bsd_wait(psk, 1, 0, 1);
 			if ((ev & (PICO_SOCK_EV_ERR | PICO_SOCK_EV_FIN | PICO_SOCK_EV_CLOSE)) || (ev == 0)) {
-				//adi: next read cleans it
-				//pico_event_clear(psk, PICO_SOCK_EV_RD);
+				pico_event_clear(psk, PICO_SOCK_EV_RD);
 				pico_event_clear(psk, PICO_SOCK_EV_ERR);
 				ret = -EINTR;
 				goto quit;
@@ -827,10 +830,6 @@ static int picotcp_recvmsg_stream(struct socket *sock, struct msghdr *msg, size_
 		picotcp_dbg("memcpy_to_msg_failed\n");
 	}
 
-	if (tot_len < len) {
-		pico_event_clear(psk, PICO_SOCK_EV_RD);
-		pico_event_clear(psk, PICO_SOCK_EV_ERR);
-	}
 	ret = tot_len;
 
 quit:
@@ -950,8 +949,7 @@ static int picotcp_recvmsg_dgram(struct socket *sock, struct msghdr *msg, size_t
 		ev = pico_bsd_wait(psk, 1, 0, 1);
 		if ((ev & (PICO_SOCK_EV_ERR | PICO_SOCK_EV_FIN | PICO_SOCK_EV_CLOSE))
 				|| (ev == 0)) {
-			//adi: next read cleans it
-			//pico_event_clear(psk, PICO_SOCK_EV_RD);
+			pico_event_clear(psk, PICO_SOCK_EV_RD);
 			pico_event_clear(psk, PICO_SOCK_EV_ERR);
 			ret = -EINTR;
 			goto quit;

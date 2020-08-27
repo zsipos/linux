@@ -462,11 +462,40 @@ int rem_pico_socket_recvfrom(iprcchan_t *chan, rem_pico_socket_t *s, void *buf, 
 	arg->hdr.func = f_rem_pico_socket_recvfrom;
 	a->s          = s;
 	a->len        = len;
+	a->lock       = 1;
 	do_call(chan);
 	pico_err    = res->hdr.pico_err;
 	retval      = r->retval;
 	*orig       = r->orig;
 	*local_port = r->local_port;
+	if (retval > 0)
+		memcpy(buf, &r->buf[0], retval);
+	iprcchan_end_call(chan);
+	return retval;
+}
+
+int rem_pico_socket_recvfrom2(iprcchan_t *chan, rem_pico_socket_t *s, void *buf, int len, union pico_address *orig, uint16_t *local_port, int lock, int *more)
+{
+	rem_arg_t                      *arg = iprcchan_begin_call(chan);
+	rem_res_t                      *res = (rem_res_t*)arg;
+	rem_pico_socket_recvfrom_arg_t *a = &arg->u.rem_pico_socket_recvfrom_arg;
+	rem_pico_socket_recvfrom_res_t *r = &res->u.rem_pico_socket_recvfrom_res;
+	int                             retval;
+
+	if (len > REM_BUFFSIZE)
+		len = REM_BUFFSIZE;
+	else if (len < 0)
+		len = 0;
+	arg->hdr.func = f_rem_pico_socket_recvfrom;
+	a->s          = s;
+	a->len        = len;
+	a->lock       = lock;
+	do_call(chan);
+	pico_err    = res->hdr.pico_err;
+	retval      = r->retval;
+	*orig       = r->orig;
+	*local_port = r->local_port;
+	*more       = r->more;
 	if (retval > 0)
 		memcpy(buf, &r->buf[0], retval);
 	iprcchan_end_call(chan);
@@ -509,6 +538,23 @@ int rem_pico_socket_udp_poll(iprcchan_t *chan, rem_pico_socket_t *s)
 	int                             retval;
 
 	arg->hdr.func = f_rem_pico_socket_udp_poll;
+	a->s          = s;
+	do_call(chan);
+	pico_err    = res->hdr.pico_err;
+	retval      = r->retval;
+	iprcchan_end_call(chan);
+	return retval;
+}
+
+int rem_pico_socket_tcp_poll(iprcchan_t *chan, rem_pico_socket_t *s)
+{
+	rem_arg_t                      *arg = iprcchan_begin_call(chan);
+	rem_res_t                      *res = (rem_res_t*)arg;
+	rem_pico_socket_tcp_poll_arg_t *a = &arg->u.rem_pico_socket_tcp_poll_arg;
+	rem_pico_socket_tcp_poll_res_t *r = &res->u.rem_pico_socket_tcp_poll_res;
+	int                             retval;
+
+	arg->hdr.func = f_rem_pico_socket_tcp_poll;
 	a->s          = s;
 	do_call(chan);
 	pico_err    = res->hdr.pico_err;
