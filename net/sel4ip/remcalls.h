@@ -1,7 +1,7 @@
 #ifndef _H_REMCALLS_H
 #define _H_REMCALLS_H
 
-#define MINLOCK
+#define MINLOCK // avoid pico stack full locks
 
 #define REM_BUFFSIZE 3072
 
