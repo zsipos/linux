@@ -40,6 +40,7 @@ struct picotcp_sock {
 	volatile uint16_t       revents; /* received events */
 	volatile uint32_t       udpcnt;
 	struct mutex            events_mutex; /* mutex for clearing revents */
+	pico_err_t              everr; /* last error code from PICO_SOCK_EV_ERR */
 	struct net             *net; /* Network */
 	struct mutex           *stack_mutex; /* mutex for selected stack */
 	iprcchan_t             *stack_chan; /* iprcchan for selected stack */
@@ -134,6 +135,20 @@ static inline void psk_sock_unlock(struct picotcp_sock *sock)
 
 /* UTILS */
 
+static int err_from_ev(struct picotcp_sock *psk, uint16_t ev)
+{
+	if (ev & PICO_SOCK_EV_ERR) {
+		printk("EV_ERR: %d\n", psk->everr);
+		return psk->everr;
+	}
+	if (ev & PICO_SOCK_EV_FIN) {
+		printk("EV_FIN\n");
+		return ECONNRESET;
+	}
+	printk("EV_CLOSE or 0\n");
+	return EINTR;
+}
+
 /*** Helper functions ***/
 static int bsd_to_pico_addr(union pico_address *addr, struct sockaddr *_saddr, socklen_t socklen)
 {
@@ -215,6 +230,7 @@ static uint16_t pico_bsd_select(struct picotcp_sock *psk, uint16_t wait_events)
 		if (signal_pending(current)) {
 			picotcp_dbg("set PICO_SOCK_EV_ERR\n");
 			psk->revents = PICO_SOCK_EV_ERR;
+			psk->everr   = EINTR;
 			break;
 		}
 	}
@@ -340,7 +356,9 @@ static void picotcp_socket_event(uint16_t ev, void *s, void *priv)
 	}
 
 	if (ev & PICO_SOCK_EV_ERR) {
+		// adi: ???
 		printk("EV_ERR, pico_err=%d\n", pico_err);
+		psk->everr = pico_err;
 		if (pico_err == PICO_ERR_ECONNRESET) {
 			dbg("Connection reset...\n");
 			psk->state = SOCK_RESET_BY_PEER;
@@ -442,11 +460,8 @@ static int picotcp_connect(struct socket *sock, struct sockaddr *_saddr, int soc
 		/* clear the EV_CONN event */
 		pico_event_clear(psk, PICO_SOCK_EV_CONN);
 		ret = 0;
-		goto quit;
-	} else if (ev & PICO_SOCK_EV_ERR) {
-		ret = -ECONNREFUSED;
 	} else {
-		ret = -EINTR;
+		ret = -err_from_ev(psk, ev);
 	}
 
 quit:
@@ -726,7 +741,7 @@ static int picotcp_sendmsg_stream(struct socket *sock, struct msghdr *msg, size_
 			if ((ev & (PICO_SOCK_EV_ERR | PICO_SOCK_EV_FIN | PICO_SOCK_EV_CLOSE)) || (ev == 0)) {
 				pico_event_clear(psk, PICO_SOCK_EV_WR);
 				pico_event_clear(psk, PICO_SOCK_EV_ERR);
-				ret = -EINTR;
+				ret = -err_from_ev(psk, ev);
 				goto quit;
 			}
 		}
@@ -820,7 +835,7 @@ static int picotcp_recvmsg_stream(struct socket *sock, struct msghdr *msg, size_
 			if ((ev & (PICO_SOCK_EV_ERR | PICO_SOCK_EV_FIN | PICO_SOCK_EV_CLOSE)) || (ev == 0)) {
 				pico_event_clear(psk, PICO_SOCK_EV_RD);
 				pico_event_clear(psk, PICO_SOCK_EV_ERR);
-				ret = -EINTR;
+				ret = -err_from_ev(psk, ev);
 				goto quit;
 			}
 		}
@@ -966,7 +981,7 @@ static int picotcp_recvmsg_dgram(struct socket *sock, struct msghdr *msg, size_t
 				|| (ev == 0)) {
 			pico_event_clear(psk, PICO_SOCK_EV_RD);
 			pico_event_clear(psk, PICO_SOCK_EV_ERR);
-			ret = -EINTR;
+			ret = -err_from_ev(psk, ev);
 			goto quit;
 		}
 	}
