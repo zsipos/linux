@@ -138,14 +138,17 @@ static inline void psk_sock_unlock(struct picotcp_sock *sock)
 static int err_from_ev(struct picotcp_sock *psk, uint16_t ev)
 {
 	if (ev & PICO_SOCK_EV_ERR) {
-		printk("EV_ERR: %d\n", psk->everr);
+		picotcp_dbg("EV_ERR: %d\n", psk->everr);
 		return psk->everr;
 	}
 	if (ev & PICO_SOCK_EV_FIN) {
-		printk("EV_FIN\n");
+		picotcp_dbg("EV_FIN\n");
 		return ECONNRESET;
 	}
-	printk("EV_CLOSE or 0\n");
+	if (ev & PICO_SOCK_EV_CLOSE)
+		picotcp_dbg("EV_CLOSE\n");
+	else
+		picotcp_dbg("EV_%d\n", ev);
 	return EINTR;
 }
 
@@ -1061,6 +1064,8 @@ quit:
 	return ret;
 }
 
+#define OPT_IGNORE	-2
+
 static int optget(int lvl, int optname)
 {
 	int option = -1;
@@ -1091,6 +1096,16 @@ static int optget(int lvl, int optname)
 		case IP_DROP_MEMBERSHIP:
 			option = PICO_IP_DROP_MEMBERSHIP;
 			break;
+
+		// these are ignored silently
+
+		case IP_PKTINFO:
+		case IP_RECVERR:
+		case IP_FREEBIND:
+		case IP_TOS:
+		case IP_OPTIONS:
+			return OPT_IGNORE;
+
 		}
 	} else if (lvl == IPPROTO_TCP) {
 		if (optname == TCP_NODELAY)
@@ -1122,6 +1137,10 @@ static int picotcp_getsockopt(struct socket *sock, int level, int optname, char 
 	}
 
 	if (option < 0) {
+		if (option == OPT_IGNORE)
+			picotcp_dbg("picotcp_getsockopt(): unknown level %d, optname %d ignored\n", level, optname);
+		else
+			printk("picotcp_getsockopt(): unknown level %d, optname %d ignored\n", level, optname);
 		ret = -EOPNOTSUPP;
 		goto quit;
 	}
@@ -1165,9 +1184,11 @@ static int picotcp_setsockopt(struct socket *sock, int level, int optname, char 
 	}
 
 	if (option < 0) {
+		if (option == OPT_IGNORE)
+			picotcp_dbg("picotcp_setsockopt(): unknown level %d, optname %d ignored\n", level, optname);
+		else
+			printk("picotcp_setsockopt(): unknown level %d, optname %d ignored\n", level, optname);
 		ret = 0;
-		printk("picotcp: unknown option %d ignored\n", optname);
-		//ret = -EOPNOTSUPP;
 		goto quit;
 	}
 
