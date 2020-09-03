@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2020 Stefan Adams <stefan.adams@vipcomag.de>
+// SPDX-License-Identifier: GPL-2.0
+
 #ifndef _h_iprcchan_h
 #define _h_iprcchan_h
 

@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: https://github.com/danielinux/linux-emcraft/tree/master/net/tcpip
+// SPDX-License-Identifier: GPL-2.0
+
 #include "picotcp.h"
 #include "iprcchan.h"
 #include "sel4ip.h"

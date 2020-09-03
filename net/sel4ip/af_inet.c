@@ -1,4 +1,6 @@
-/* Linux kernel osal implementation  */
+// SPDX-FileCopyrightText: https://github.com/danielinux/linux-emcraft/tree/master/net/tcpip
+// SPDX-License-Identifier: GPL-2.0
+
 #include <linux/tcp.h>
 #include <net/sock.h>
 #include <net/tcp_states.h>

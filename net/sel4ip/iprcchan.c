@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2020 Stefan Adams <stefan.adams@vipcomag.de>
+// SPDX-License-Identifier: GPL-2.0
+
 #include <linux/interrupt.h>
 #include <linux/types.h>
 #include <linux/of.h>

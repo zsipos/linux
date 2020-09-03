@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: https://github.com/danielinux/linux-emcraft/tree/master/net/tcpip
+// SPDX-License-Identifier: GPL-2.0
+
 /*********************************************************************
 PicoTCP. Copyright (c) 2013 TASS Belgium NV. Some rights reserved.
 See LICENSE and COPYING for usage.
