@@ -25,7 +25,6 @@ typedef struct rem_set_priv_arg {
 } rem_set_priv_arg_t;
 
 /* ioctl helpers */
-/* DO NOT CALL WITH LOCK */
 
 #define MAX_DEVICES 10
 #define MAX_ROUTES	10
@@ -127,8 +126,31 @@ typedef struct rem_get_routes_res {
 	pico_routes_t routes;
 } rem_get_routes_res_t;
 
+extern int rem_dhcp(iprcchan_t *chan, const char *name, int *nameserver_count, union pico_address *nameserver_addrs);
+
+typedef struct rem_dhcp_arg {
+	pico_dev_name_t name;
+} rem_dhcp_arg_t;
+
+typedef struct rem_dhcp_res {
+	int                nameserver_count;
+	union pico_address nameserver_addrs[SEL4IP_MAX_NAMESERVERS];
+	int retval;
+} rem_dhcp_res_t;
+
+extern int rem_ping(iprcchan_t *chan, const union pico_address *addr, int count, sel4ip_ping_stat_t *ret);
+
+typedef struct rem_ping_arg {
+	int                count;
+	union pico_address addr;
+} rem_ping_arg_t;
+
+typedef struct rem_ping_res {
+	int                retval;
+	sel4ip_ping_stat_t stats[SEL4IP_MAX_PING];
+} rem_ping_res_t;
+
 /* socket functions */
-/* YOU MUST LOCK */
 
 extern int rem_pico_socket_shutdown(iprcchan_t *chan, rem_pico_socket_t *s, int mode);
 
@@ -335,6 +357,8 @@ typedef enum rem_functions {
 	f_rem_device_down,
 	f_rem_device_addroute,
 	f_rem_get_routes,
+	f_rem_dhcp,
+	f_rem_ping,
 	f_rem_pico_socket_shutdown,
 	f_rem_pico_socket_connect,
 	f_rem_pico_socket_close,
@@ -369,6 +393,8 @@ typedef struct rem_arg {
 		rem_set_device_address_arg_t    rem_set_device_address_arg;
 		rem_device_down_arg_t           rem_device_down_arg;
 		rem_device_addroute_arg_t       rem_device_addroute_arg;
+		rem_dhcp_arg_t                  rem_dhcp_arg;
+		rem_ping_arg_t                  rem_ping_arg;
 		rem_pico_socket_shutdown_arg_t  rem_pico_socket_shutdown_arg;
 		rem_pico_socket_connect_arg_t   rem_pico_socket_connect_arg;
 		rem_pico_socket_close_arg_t     rem_pico_socket_close_arg;
@@ -396,6 +422,8 @@ typedef struct rem_res {
 		rem_device_down_res_t           rem_device_down_res;
 		rem_device_addroute_res_t       rem_device_addroute_res;
 		rem_get_routes_res_t            rem_get_routes_res;
+		rem_dhcp_res_t					rem_dhcp_res;
+		rem_ping_res_t					rem_ping_res;
 		rem_pico_socket_shutdown_res_t  rem_pico_socket_shutdown_res;
 		rem_pico_socket_connect_res_t   rem_pico_socket_connect_res;
 		rem_pico_socket_close_res_t     rem_pico_socket_close_res;

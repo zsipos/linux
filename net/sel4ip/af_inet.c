@@ -5,6 +5,7 @@
 
 #include "picotcp.h"
 #include "iprcchan.h"
+#include "sel4ip.h"
 #include "remcalls.h"
 #include "doioctl.h"
 

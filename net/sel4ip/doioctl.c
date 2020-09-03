@@ -1,5 +1,6 @@
 #include "picotcp.h"
 #include "iprcchan.h"
+#include "sel4ip.h"
 #include "remcalls.h"
 
 #define ioctl_debug(...) do{}while(0)
@@ -333,6 +334,56 @@ static int picotcp_gtxqlen(struct socket *sock, unsigned long arg)
     return 0;
 }
 
+static int picotcp_do_dhcp(struct socket *sock, unsigned long _arg)
+{
+	struct sel4ioctl   arg;
+	int                ret, i;
+	int                nameserver_count;
+	union pico_address nameserver_addrs[SEL4IP_MAX_NAMESERVERS];
+
+	if (copy_from_user(&arg, (void*)_arg, sizeof(struct sel4ioctl)))
+		return -EFAULT;
+
+	ret = rem_dhcp(get_chan(arg.ifname), arg.ifname, &nameserver_count, nameserver_addrs);
+
+	if (ret == 0) {
+		arg.dhcp.nameserver_count = nameserver_count;
+		for(i = 0; i < nameserver_count; i++) {
+			struct sockaddr_in *p = (struct sockaddr_in*)&arg.dhcp.nameserver_addrs[i];
+
+			p->sin_family = AF_INET;
+			memcpy(&p->sin_addr.s_addr,	&nameserver_addrs[i].ip4, sizeof(struct pico_ip4));
+		}
+	}
+
+	if (copy_to_user((void*)_arg, &arg, sizeof(struct sel4ioctl)))
+		return -EFAULT;
+
+	return ret;
+}
+
+static int picotcp_do_ping(struct socket *sock, unsigned long _arg)
+{
+	struct sel4ioctl   arg;
+	int                ret;
+	union pico_address addr;
+
+	if (copy_from_user(&arg, (void*)_arg, sizeof(struct sel4ioctl)))
+		return -EFAULT;
+
+	if ((arg.ping.count < 1) || (arg.ping.count > SEL4IP_MAX_PING))
+		return -EINVAL;
+
+	memcpy(&addr.ip4, &((struct sockaddr_in*)(&arg.ping.addr))->sin_addr.s_addr, sizeof(struct pico_ip4));
+
+	ret = rem_ping(get_chan(arg.ifname), &addr, arg.ping.count, arg.ping.stats);
+
+	if (copy_to_user((void*)_arg, &arg, sizeof(struct sel4ioctl)))
+		return -EFAULT;
+
+	return ret;
+}
+
 int doioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	int err;
@@ -396,6 +447,16 @@ int doioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCADDRT:
 		err = picotcp_addroute(sock, cmd, arg);
 		break;
+
+		/* SEL4IP specific */
+
+	case SIOCSEL4IPDHCP:
+		err = picotcp_do_dhcp(sock, arg);
+		break;
+	case SIOCSEL4IPPING:
+		err = picotcp_do_ping(sock, arg);
+		break;
+
 
 	default:
 		err = -EOPNOTSUPP;

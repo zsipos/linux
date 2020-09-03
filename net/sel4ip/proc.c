@@ -2,6 +2,7 @@
 
 #include "picotcp.h"
 #include "iprcchan.h"
+#include "sel4ip.h"
 #include "remcalls.h"
 
 static int stack_proc_show(struct seq_file *m, void *v)

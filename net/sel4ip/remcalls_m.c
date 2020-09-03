@@ -1,5 +1,6 @@
 #include "picotcp.h"
 #include "iprcchan.h"
+#include "sel4ip.h"
 #include "remcalls.h"
 
 volatile pico_err_t pico_err;
@@ -213,6 +214,48 @@ int rem_get_routes(iprcchan_t *chan, pico_routes_t *routes)
 	do_call(chan);
 	retval  = r->retval;
 	*routes = r->routes;
+	iprcchan_end_call(chan);
+	return retval;
+}
+
+int rem_dhcp(iprcchan_t *chan, const char *name, int *nameserver_count, union pico_address *nameserver_addrs)
+{
+	rem_arg_t      *arg = iprcchan_begin_call(chan);
+	rem_res_t      *res = (rem_res_t*)arg;
+	rem_dhcp_arg_t *a = &arg->u.rem_dhcp_arg;
+	rem_dhcp_res_t *r = &res->u.rem_dhcp_res;
+	int             retval, i;
+
+	arg->hdr.func = f_rem_dhcp;
+	strncpy(a->name, name, sizeof(a->name)-1);
+	a->name[sizeof(a->name)-1] = 0;
+	do_call(chan);
+	*nameserver_count = r->nameserver_count;
+	for (i = 0; i < SEL4IP_MAX_NAMESERVERS; i++)
+		nameserver_addrs[i] = r->nameserver_addrs[i];
+	retval = r->retval;
+	iprcchan_end_call(chan);
+	return retval;
+}
+
+int rem_ping(iprcchan_t *chan, const union pico_address *addr, int count, sel4ip_ping_stat_t *ret)
+{
+	rem_arg_t      *arg = iprcchan_begin_call(chan);
+	rem_res_t      *res = (rem_res_t*)arg;
+	rem_ping_arg_t *a = &arg->u.rem_ping_arg;
+	rem_ping_res_t *r = &res->u.rem_ping_res;
+	int             retval, i;
+
+	if (count > SEL4IP_MAX_PING)
+		count = SEL4IP_MAX_PING;
+
+	arg->hdr.func = f_rem_ping;
+	a->addr = *addr;
+	a->count = count;
+	do_call(chan);
+	retval = r->retval;
+	for(i = 0; i < count; i++)
+		ret[i] = r->stats[i];
 	iprcchan_end_call(chan);
 	return retval;
 }
