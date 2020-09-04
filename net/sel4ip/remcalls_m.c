@@ -111,6 +111,22 @@ void rem_set_priv(iprcchan_t *chan, rem_pico_socket_t *s, void *priv)
 	iprcchan_end_call(chan);
 }
 
+int rem_init_eth(iprcchan_t *chan, const unsigned char *mac)
+{
+	rem_arg_t          *arg = iprcchan_begin_call(chan);
+	rem_res_t          *res = (rem_res_t*)arg;
+	rem_init_eth_arg_t *a = &arg->u.rem_init_eth_arg;
+	rem_init_eth_res_t *r = &res->u.rem_init_eth_res;
+	int                 retval;
+
+	arg->hdr.func = f_rem_init_eth;
+	memcpy(a->macaddr, mac, ETH_MAC_LEN);
+	do_call(chan);
+	retval = r->retval;
+	iprcchan_end_call(chan);
+	return retval;
+}
+
 int rem_get_devices(iprcchan_t *chan, pico_devices_t *devices)
 {
 	rem_arg_t             *arg = iprcchan_begin_call(chan);

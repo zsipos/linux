@@ -8,6 +8,8 @@
 
 #define REM_BUFFSIZE 3072
 
+#define ETH_MAC_LEN 6
+
 typedef struct rem_pico_socket rem_pico_socket_t;
 
 extern int rem_init(void (*eventfunc)(uint16_t ev, void *s, void *priv));
@@ -62,6 +64,16 @@ typedef struct pico_routes {
 	int          count;
 	pico_route_t routes[MAX_ROUTES];
 } pico_routes_t;
+
+extern int rem_init_eth(iprcchan_t *chan, const unsigned char *mac);
+
+typedef struct rem_init_eth_arg {
+	unsigned char macaddr[ETH_MAC_LEN];
+} rem_init_eth_arg_t;
+
+typedef struct rem_init_eth_res {
+	int retval;
+} rem_init_eth_res_t;
 
 extern int rem_get_devices(iprcchan_t *chan, pico_devices_t *devices);
 
@@ -354,6 +366,7 @@ typedef enum rem_functions {
 	f_rem_stack_lock,
 	f_rem_stack_unlock,
 	f_rem_set_priv,
+	f_rem_init_eth,
 	f_rem_get_devices,
 	f_rem_get_device_config,
 	f_rem_set_device_address,
@@ -392,6 +405,7 @@ typedef struct rem_arg {
 	rem_arg_hdr_t hdr;
 	union {
 		rem_set_priv_arg_t              rem_set_priv_arg;
+		rem_init_eth_arg_t              rem_init_eth_arg;
 		rem_get_device_config_arg_t     rem_get_device_config_arg;
 		rem_set_device_address_arg_t    rem_set_device_address_arg;
 		rem_device_down_arg_t           rem_device_down_arg;
@@ -419,6 +433,7 @@ typedef struct rem_arg {
 typedef struct rem_res {
 	rem_res_hdr_t hdr;
 	union {
+		rem_init_eth_res_t              rem_init_eth_res;
 		rem_get_devices_res_t           rem_get_devices_res;
 		rem_get_device_config_res_t     rem_get_device_config_res;
 		rem_set_device_address_res_t    rem_set_device_address_res;

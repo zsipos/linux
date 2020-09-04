@@ -1379,13 +1379,20 @@ static struct pernet_operations picotcp_net_ops = {
 
 int af_inet_picotcp_init(void)
 {
-	int rc;
+	int rc, i;
+	unsigned char macaddr[ETH_MAC_LEN];
 
 	mutex_init(&stack0_mutex);
 	mutex_init(&stack1_mutex);
 	rc = rem_init(picotcp_socket_event);
 	if (rc)
 		panic("Cannot initialize remote functions\n");
+	for (i = 0; i < 2; i++) {
+		eth_random_addr(macaddr);
+		rc = rem_init_eth(rem_get_chan(i), macaddr);
+		if (rc)
+			panic("Cannot initialize ethernet device\n");
+	}
 	rc = proto_register(&picotcp_proto, 1);
 	if (rc) {
 		rem_deinit();
