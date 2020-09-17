@@ -1385,18 +1385,23 @@ int af_inet_picotcp_init(void)
 	mutex_init(&stack0_mutex);
 	mutex_init(&stack1_mutex);
 	rc = rem_init(picotcp_socket_event);
-	if (rc)
-		panic("Cannot initialize remote functions\n");
+	if (rc) {
+		printk(KERN_ERR "Can not initialize remote functions\n");
+		return rc;
+	}
 	for (i = 0; i < 2; i++) {
 		eth_random_addr(macaddr);
 		rc = rem_init_eth(rem_get_chan(i), macaddr);
-		if (rc)
-			panic("Cannot initialize ethernet device\n");
+		if (rc) {
+			printk(KERN_ERR "Can not initialize ethernet device\n");
+			return rc;
+		}
 	}
 	rc = proto_register(&picotcp_proto, 1);
 	if (rc) {
 		rem_deinit();
-		panic("Cannot register AF_INET family for PicoTCP\n");
+		printk(KERN_ERR "Can not register AF_INET family for PicoTCP\n");
+		return rc;
 	}
 	sock_register(&picotcp_family_ops);
 	register_pernet_subsys(&picotcp_net_ops);
