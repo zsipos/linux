@@ -91,6 +91,24 @@ static inline void pico_full_stack_unlock(struct mutex *mutex, iprcchan_t *chan)
 	pico_stack_unlock(mutex, chan);
 }
 
+static struct mutex *chan2mutex(iprcchan_t *chan)
+{
+	if (chan == rem_get_chan(1))
+		return &stack1_mutex;
+	else
+		return &stack0_mutex;
+}
+
+void pico_stack_lock_by_chan(iprcchan_t *chan)
+{
+	pico_stack_lock(chan2mutex(chan), chan);
+}
+
+void pico_stack_unlock_by_chan(iprcchan_t *chan)
+{
+	pico_stack_unlock(chan2mutex(chan), chan);
+}
+
 static inline void psk_stack_lock(struct picotcp_sock *sock)
 {
 	pico_stack_lock(sock->stack_mutex, sock->stack_chan);
