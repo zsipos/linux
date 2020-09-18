@@ -6,8 +6,13 @@
 #include "sel4ip.h"
 #include "remcalls.h"
 
+#define IOCTL_DEBUG	1
+
+#if IOCTL_DEBUG
+#define ioctl_debug printk
+#else
 #define ioctl_debug(...) do{}while(0)
-//#define ioctl_debug printk
+#endif
 
 static iprcchan_t *get_chan(char *name)
 {
