@@ -857,6 +857,9 @@ static int picotcp_recvmsg_stream(struct socket *sock, struct msghdr *msg, size_
 		if (tot_len < len) {
 			uint16_t ev = pico_bsd_wait(psk, 1, 0, 1);
 			if ((ev & (PICO_SOCK_EV_ERR | PICO_SOCK_EV_FIN | PICO_SOCK_EV_CLOSE)) || (ev == 0)) {
+				if (tot_len)
+					break;
+				printk("ev=%x tot_len=%d\n", ev, tot_len);
 				pico_event_clear(psk, PICO_SOCK_EV_RD);
 				pico_event_clear(psk, PICO_SOCK_EV_ERR);
 				ret = -err_from_ev(psk, ev);
