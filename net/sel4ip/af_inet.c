@@ -535,14 +535,12 @@ static int picotcp_bind(struct socket *sock, struct sockaddr *local_addr, int so
 	if ((psk->stack_chan == rem_get_chan(0)) && is_stack1_address(&addr)) {
 		picotcp_dbg("bind: move socket from stack0 to stack1\n");
 		ret = reopen_on_stack1(sock);
-		printk("moved\n");
 		if (ret)
 			goto quit;
 	}
 
 	psk_stack_lock(psk);
 	if (rem_pico_socket_bind(psk->stack_chan, psk->pico, &addr, &port) < 0) {
-		printk("bind failed\n");
 		picotcp_dbg("bind: failed\n");
 		ret =  -pico_err;
 		goto quit;
