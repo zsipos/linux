@@ -99,16 +99,6 @@ static struct mutex *chan2mutex(iprcchan_t *chan)
 		return &stack0_mutex;
 }
 
-void pico_stack_lock_by_chan(iprcchan_t *chan)
-{
-	pico_stack_lock(chan2mutex(chan), chan);
-}
-
-void pico_stack_unlock_by_chan(iprcchan_t *chan)
-{
-	pico_stack_unlock(chan2mutex(chan), chan);
-}
-
 static inline void psk_stack_lock(struct picotcp_sock *sock)
 {
 	pico_stack_lock(sock->stack_mutex, sock->stack_chan);
@@ -152,6 +142,16 @@ static inline void psk_sock_lock_nested(struct picotcp_sock *sock, int subclass)
 static inline void psk_sock_unlock(struct picotcp_sock *sock)
 {
 	release_sock((struct sock*)sock);
+}
+
+void pico_stack_lock_by_chan(iprcchan_t *chan)
+{
+	pico_stack_lock(chan2mutex(chan), chan);
+}
+
+void pico_stack_unlock_by_chan(iprcchan_t *chan)
+{
+	pico_stack_unlock(chan2mutex(chan), chan);
 }
 
 /* UTILS */
@@ -497,6 +497,21 @@ quit:
 	return ret;
 }
 
+static int is_stack1_address(union pico_address *addr)
+{
+	iprcchan_t           *chan1 = rem_get_chan(1);
+	pico_device_config_t  config;
+	int                   ret;
+
+	pico_stack_lock_by_chan(chan1);
+	rem_get_device_config(chan1, "eth1", &config);
+	ret = config.address.ip4.addr == addr->ip4.addr;
+	pico_stack_unlock_by_chan(chan1);
+	return ret;
+}
+
+static int reopen_on_stack1(struct socket *sock);
+
 static int picotcp_bind(struct socket *sock, struct sockaddr *local_addr, int socklen)
 {
 	struct picotcp_sock *psk = picotcp_sock(sock);
@@ -517,9 +532,17 @@ static int picotcp_bind(struct socket *sock, struct sockaddr *local_addr, int so
 	picotcp_dbg("bind to port %d\n", short_be(port));
 	/* No check for port, if == 0 use autobind */
 
+	if ((psk->stack_chan == rem_get_chan(0)) && is_stack1_address(&addr)) {
+		picotcp_dbg("bind: move socket from stack0 to stack1\n");
+		ret = reopen_on_stack1(sock);
+		printk("moved\n");
+		if (ret)
+			goto quit;
+	}
+
 	psk_stack_lock(psk);
 	if (rem_pico_socket_bind(psk->stack_chan, psk->pico, &addr, &port) < 0) {
-		psk_stack_unlock(psk);
+		printk("bind failed\n");
 		picotcp_dbg("bind: failed\n");
 		ret =  -pico_err;
 		goto quit;
@@ -1374,6 +1397,54 @@ quit:
 	pico_full_stack_unlock(stack_mutex, stack_chan);
 
 	picotcp_dbg("leave picotcp_create(%p, %lx), ret=%d\n", psk, (unsigned long)ps, ret);
+
+	return ret;
+}
+
+static int reopen_on_stack1(struct socket *sock)
+{
+	struct picotcp_sock *psk = picotcp_sock(sock);
+	rem_pico_socket_t   *old_pico;
+	int                  protocol;
+	iprcchan_t          *chan0;
+	int                  ret = 0;
+
+	/* see picotcp_create() for details */
+	old_pico = psk->pico;
+
+	psk->stack_chan  = rem_get_chan(1);
+	psk->stack_mutex = &stack1_mutex;
+
+	psk_full_stack_lock(psk);
+
+	if (sock->type == SOCK_DGRAM) {
+		protocol = IPPROTO_UDP;
+	} else {
+		protocol = IPPROTO_TCP;
+	}
+
+	psk->pico = rem_pico_socket_open(psk->stack_chan, PICO_PROTO_IPV4, protocol);
+	if (!psk->pico) {
+		psk_full_stack_unlock(psk);
+		psk->pico        = old_pico;
+		psk->stack_chan  = rem_get_chan(0);
+		psk->stack_mutex = &stack0_mutex;
+		return -pico_err;
+	}
+
+	rem_set_priv(psk->stack_chan, psk->pico, psk);
+
+	psk_full_stack_unlock(psk);
+
+	// close old socket
+	chan0 = rem_get_chan(0);
+
+	pico_full_stack_lock(&stack0_mutex, chan0);
+
+	rem_set_priv(chan0, old_pico, NULL);
+	rem_pico_socket_close(chan0, old_pico);
+
+	pico_full_stack_unlock(&stack0_mutex, chan0);
 
 	return ret;
 }
