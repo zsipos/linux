@@ -856,8 +856,12 @@ static int picotcp_recvmsg_stream(struct socket *sock, struct msghdr *msg, size_
 		psk_full_stack_unlock(psk);
 
 		if (r < 0) {
-			picotcp_dbg("pico returned error %d\n", -pico_err);
-			ret = -pico_err;
+			if (pico_err == ESHUTDOWN) {
+				ret = 0;
+			} else {
+				picotcp_dbg("pico returned error %d\n", -pico_err);
+				ret = -pico_err;
+			}
 			goto quit;
 		}
 
