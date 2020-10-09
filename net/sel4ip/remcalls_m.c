@@ -476,6 +476,31 @@ int rem_pico_socket_send(iprcchan_t *chan, rem_pico_socket_t *s, const void *buf
 	arg->hdr.func  = f_rem_pico_socket_send;
 	a->s           = s;
 	a->len         = len;
+	a->lock        = 1;
+	memcpy(&a->buf[0], buf, len);
+	do_call(chan);
+	pico_err = res->hdr.pico_err;
+	retval   = r->retval;
+	iprcchan_end_call(chan);
+	return retval;
+}
+
+int rem_pico_socket_send2(iprcchan_t *chan, rem_pico_socket_t *s, const void *buf, int len)
+{
+	rem_arg_t                  *arg = iprcchan_begin_call(chan);
+	rem_res_t                  *res = (rem_res_t*)arg;
+	rem_pico_socket_send_arg_t *a = &arg->u.rem_pico_socket_send_arg;
+	rem_pico_socket_send_res_t *r = &res->u.rem_pico_socket_send_res;
+	int                         retval;
+
+	if (len > REM_BUFFSIZE)
+		len = REM_BUFFSIZE;
+	else if (len < 0)
+		len = 0;
+	arg->hdr.func  = f_rem_pico_socket_send;
+	a->s           = s;
+	a->len         = len;
+	a->lock        = 0;
 	memcpy(&a->buf[0], buf, len);
 	do_call(chan);
 	pico_err = res->hdr.pico_err;

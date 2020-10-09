@@ -273,12 +273,16 @@ extern int rem_pico_socket_send(iprcchan_t *chan, rem_pico_socket_t *s, const vo
 typedef struct rem_pico_socket_send_arg {
 	rem_pico_socket_t  *s;
 	int                 len;
+	int                 lock;
 	char                buf[1];
 } rem_pico_socket_send_arg_t;
 
 typedef struct rem_pico_socket_send_res {
 	int retval;
 } rem_pico_socket_send_res_t;
+
+// without pico stack locking
+extern int rem_pico_socket_send2(iprcchan_t *chan, rem_pico_socket_t *s, const void *buf, int len);
 
 extern int rem_pico_socket_send_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct msghdr *msg, int len);
 
@@ -298,6 +302,7 @@ typedef struct rem_pico_socket_recvfrom_res {
 	char               buf[1];
 } rem_pico_socket_recvfrom_res_t;
 
+// without pico stack locking
 extern int rem_pico_socket_recvfrom2(iprcchan_t *chan, rem_pico_socket_t *s, void *buf, int len, union pico_address *orig, uint16_t *local_port, int lock, int *more);
 
 extern int rem_pico_socket_recvfrom_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct msghdr *msg, int len, union pico_address *orig, uint16_t *local_port);
