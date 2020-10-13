@@ -15,7 +15,7 @@
 
 #define PICOTCP_DEBUG			0
 #define PICOTCP_DEBUG_EVENTS	1
-#define PICOTCP_DEBUG_POLL		1
+#define PICOTCP_DEBUG_POLL		0
 
 #if PICOTCP_DEBUG
 #define picotcp_dbg printk
@@ -721,8 +721,6 @@ static int picotcp_listen(struct socket *sock, int backlog)
 static int picotcp_sendmsg_stream(struct socket *sock, struct msghdr *msg, size_t len)
 {
 	struct picotcp_sock *psk = picotcp_sock(sock);
-	union pico_address   addr;
-	uint16_t             port = 0;
 	uint8_t             *kbuf = NULL;
 	int                  tot_len = 0;
 	int                  ret;
@@ -744,8 +742,8 @@ static int picotcp_sendmsg_stream(struct socket *sock, struct msghdr *msg, size_
 	}
 
 	if (msg->msg_namelen > 0) {
-		bsd_to_pico_addr(&addr, msg->msg_name, msg->msg_namelen);
-		port = bsd_to_pico_port(msg->msg_name, msg->msg_namelen);
+		ret = -EISCONN;
+		goto quit;
 	}
 
 	if (memcpy_from_msg(kbuf, msg, len) < 0) {
@@ -755,15 +753,27 @@ static int picotcp_sendmsg_stream(struct socket *sock, struct msghdr *msg, size_
 	while (tot_len < len) {
 		int r;
 
+#if 0
 		psk_stack_lock(psk);
 
 		pico_event_clear(psk, PICO_SOCK_EV_WR);
-		if (msg->msg_namelen > 0)
-			r = rem_pico_socket_sendto(psk->stack_chan, psk->pico, kbuf + tot_len, len - tot_len, &addr, port);
-		else
-			r = rem_pico_socket_send(psk->stack_chan, psk->pico, kbuf + tot_len, len - tot_len);
+		r = rem_pico_socket_send(psk->stack_chan, psk->pico, kbuf + tot_len, len - tot_len);
 
 		psk_stack_unlock(psk);
+#else
+		psk_full_stack_lock(psk);
+
+		pico_event_clear(psk, PICO_SOCK_EV_WR);
+		r = rem_pico_socket_send2(psk->stack_chan, psk->pico, kbuf + tot_len, len - tot_len);
+
+		/*
+		if (r == 0) {
+			pico_event_clear(psk, PICO_SOCK_EV_WR);
+		}
+		*/
+
+		psk_full_stack_unlock(psk);
+#endif
 
 		if (r < 0) {
 			ret = -pico_err;
