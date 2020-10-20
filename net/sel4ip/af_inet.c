@@ -232,6 +232,7 @@ static int pico_addr_to_bsd(struct sockaddr *_saddr, socklen_t socklen, union pi
 		struct sockaddr_in *saddr = (struct sockaddr_in *) _saddr;
 		saddr->sin_addr.s_addr = addr->ip4.addr;
 		saddr->sin_family = AF_INET;
+		memset(&saddr->sin_zero, 0, sizeof(saddr->sin_zero));
 		return 0;
 	}
 	printk(KERN_ERR "pico_addr_to_bsd: bad socklen %d\n", socklen);
@@ -987,7 +988,7 @@ static int picotcp_recvmsg_dgram(struct socket *sock, struct msghdr *msg, size_t
 	uint16_t             port;
 	int                  ret;
 
-	picotcp_dbg("enter picotcp_recvmsg_stream(%p, %lx) len=%ld flags=%x\n", psk, (unsigned long)psk->pico, len, flags);
+	picotcp_dbg("enter picotcp_recvmsg_dgram(%p, %lx) len=%ld flags=%x\n", psk, (unsigned long)psk->pico, len, flags);
 
 	psk_sock_lock(psk);
 
