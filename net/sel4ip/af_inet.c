@@ -542,6 +542,7 @@ static int picotcp_bind(struct socket *sock, struct sockaddr *local_addr, int so
 
 	psk_stack_lock(psk);
 	if (rem_pico_socket_bind(psk->stack_chan, psk->pico, &addr, &port) < 0) {
+		psk_stack_unlock(psk);
 		picotcp_dbg("bind: failed\n");
 		ret =  -pico_err;
 		goto quit;
