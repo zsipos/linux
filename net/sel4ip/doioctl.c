@@ -471,6 +471,23 @@ static int picotcp_do_ping(struct socket *sock, unsigned long _arg)
 	return ret;
 }
 
+static int picotcp_do_timer(struct socket *sock, unsigned long _arg)
+{
+	struct sel4ioctl    arg;
+	iprcchan_t         *chan;
+	int                 ret;
+
+	chan = get_chan(arg.ifname);
+	do_lock(chan);
+	ret = rem_timer(chan, &arg.timer.val);
+	do_unlock(chan);
+
+	if (copy_to_user((void*)_arg, &arg, sizeof(struct sel4ioctl)))
+		return -EFAULT;
+
+	return ret;
+}
+
 int doioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	int err;
@@ -542,6 +559,9 @@ int doioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		break;
 	case SIOCSEL4IPPING:
 		err = picotcp_do_ping(sock, arg);
+		break;
+	case SIOCSEL4IPTIMER:
+		err = picotcp_do_timer(sock, arg);
 		break;
 
 

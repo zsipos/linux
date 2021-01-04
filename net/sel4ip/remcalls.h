@@ -165,6 +165,12 @@ typedef struct rem_ping_res {
 	sel4ip_ping_stat_t stats[SEL4IP_MAX_PING];
 } rem_ping_res_t;
 
+extern int rem_timer(iprcchan_t *chan, unsigned long *val);
+
+typedef struct rem_timer_res {
+	unsigned long val;
+} rem_timer_res_t;
+
 /* socket functions */
 
 extern int rem_pico_socket_shutdown(iprcchan_t *chan, rem_pico_socket_t *s, int mode);
@@ -380,6 +386,7 @@ typedef enum rem_functions {
 	f_rem_get_routes,
 	f_rem_dhcp,
 	f_rem_ping,
+	f_rem_timer,
 	f_rem_pico_socket_shutdown,
 	f_rem_pico_socket_connect,
 	f_rem_pico_socket_close,
@@ -447,6 +454,7 @@ typedef struct rem_res {
 		rem_get_routes_res_t            rem_get_routes_res;
 		rem_dhcp_res_t					rem_dhcp_res;
 		rem_ping_res_t					rem_ping_res;
+		rem_timer_res_t					rem_timer_res;
 		rem_pico_socket_shutdown_res_t  rem_pico_socket_shutdown_res;
 		rem_pico_socket_connect_res_t   rem_pico_socket_connect_res;
 		rem_pico_socket_close_res_t     rem_pico_socket_close_res;

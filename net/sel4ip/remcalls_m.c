@@ -279,6 +279,20 @@ int rem_ping(iprcchan_t *chan, const union pico_address *addr, int count, sel4ip
 	return retval;
 }
 
+int rem_timer(iprcchan_t *chan, unsigned long *val)
+{
+	rem_arg_t       *arg = iprcchan_begin_call(chan);
+	rem_res_t       *res = (rem_res_t*)arg;
+	rem_timer_res_t *r = &res->u.rem_timer_res;
+	int              retval = 0;
+
+	arg->hdr.func = f_rem_timer;
+	do_call(chan);
+	*val = r->val;
+	iprcchan_end_call(chan);
+	return retval;
+}
+
 int rem_pico_socket_shutdown(iprcchan_t *chan, rem_pico_socket_t *s, int mode)
 {
 	rem_arg_t                      *arg = iprcchan_begin_call(chan);

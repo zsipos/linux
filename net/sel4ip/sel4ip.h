@@ -6,6 +6,7 @@
 
 #define SIOCSEL4IPDHCP	(SIOCPROTOPRIVATE+0x0)
 #define SIOCSEL4IPPING	(SIOCPROTOPRIVATE+0x1)
+#define SIOCSEL4IPTIMER	(SIOCPROTOPRIVATE+0x2)
 
 #define SEL4IP_SOCKADDR_SIZE   128
 #define SEL4IP_MAX_NAMESERVERS 4
@@ -33,6 +34,9 @@ struct sel4ioctl {
 			sel4ip_sockaddr_t  addr; /* arg, sockaddr_in or sockaddr_in6 */
 			sel4ip_ping_stat_t stats[SEL4IP_MAX_PING]; /* result */
 		} ping;
+		struct {
+			unsigned long      val; /* result */
+		} timer;
 	};
 };
 
