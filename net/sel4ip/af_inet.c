@@ -242,28 +242,28 @@ static int pico_addr_to_bsd(struct sockaddr *_saddr, socklen_t socklen, union pi
 static uint16_t pico_bsd_select(struct picotcp_sock *psk, uint16_t wait_events)
 {
 	uint16_t events = wait_events & psk->revents; /* maybe an event we are waiting for, was already queued ? */
-	struct timespec ts_start, ts_now;
+	u64 time_start;
 	DEFINE_WAIT(wait);
 
 	picotcp_dbg("enter pico_bsd_select(%p,%lx)\n", psk, (unsigned long)psk->pico);
 
 	/* wait for one of the selected events... */
-	getnstimeofday(&ts_start);
+	time_start = ktime_get();
 	prepare_to_wait(sk_sleep(&psk->sk), &wait, TASK_INTERRUPTIBLE);
 	while (!events) {
-		getnstimeofday(&ts_now);
-		if (ts_now.tv_sec - ts_start.tv_sec >= 60) {
-			printk("WARNING: long pico_bsd_select(%x)\n", wait_events);
-			if (wait_events & PICO_SOCK_EV_RD)
-				printk("wait read\n");
-			if (wait_events & PICO_SOCK_EV_WR) {
-				printk("wait write\n");
-			}
-			getnstimeofday(&ts_start);
-		}
 		events = (psk->revents & wait_events); /* filter for the events we were waiting for */
-		if (!events)
+		if (!events) {
+			if (ktime_get_ns() - time_start >= 60*NSEC_PER_SEC) {
+				printk("WARNING: long pico_bsd_select(%x)\n", wait_events);
+				if (wait_events & PICO_SOCK_EV_RD)
+					printk("wait read\n");
+				if (wait_events & PICO_SOCK_EV_WR) {
+					printk("wait write\n");
+				}
+				time_start = ktime_get_ns();
+			}
 			schedule();
+		}
 		if (signal_pending(current)) {
 			picotcp_dbg("set PICO_SOCK_EV_ERR\n");
 			psk->revents = PICO_SOCK_EV_ERR;
