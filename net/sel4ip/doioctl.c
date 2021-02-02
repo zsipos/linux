@@ -60,6 +60,8 @@ static int picotcp_iosgaddr(struct socket *sock, unsigned int cmd, unsigned long
 		union pico_address pico_address;
 		union pico_address pico_netmask;
 
+		memset(&pico_address, 0, sizeof(pico_address));
+		memset(&pico_netmask, 0, sizeof(pico_netmask));
 		pico_address.ip4.addr = addr->sin_addr.s_addr;
 		if (config.hasipv4link)
 			pico_netmask = config.netmask;
@@ -476,6 +478,9 @@ static int picotcp_do_timer(struct socket *sock, unsigned long _arg)
 	struct sel4ioctl    arg;
 	iprcchan_t         *chan;
 	int                 ret;
+
+	if (copy_from_user(&arg, (void*)_arg, sizeof(struct sel4ioctl)))
+		return -EFAULT;
 
 	chan = get_chan(arg.ifname);
 	do_lock(chan);
