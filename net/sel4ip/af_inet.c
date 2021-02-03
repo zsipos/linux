@@ -23,6 +23,8 @@
 #define picotcp_dbg(...) /*as nothing*/
 #endif
 
+#define MAX_SOCKETS 1024
+
 #define SOCK_OPEN                   0
 #define SOCK_BOUND                  1
 #define SOCK_LISTEN                 2
@@ -47,6 +49,7 @@ struct picotcp_sock {
 	struct net             *net; /* Network */
 	struct mutex           *stack_mutex; /* mutex for selected stack */
 	iprcchan_t             *stack_chan; /* iprcchan for selected stack */
+	long                    sd; /* index in sockmap */
 };
 
 static inline struct picotcp_sock *picotcp_sock(struct socket *sock)
@@ -152,6 +155,39 @@ void pico_stack_lock_by_chan(iprcchan_t *chan)
 void pico_stack_unlock_by_chan(iprcchan_t *chan)
 {
 	pico_stack_unlock(chan2mutex(chan), chan);
+}
+
+/* SOCKET MAP */
+
+static void *sockmap[MAX_SOCKETS];
+
+static long add_sockmap(void *priv)
+{
+	long i;
+
+	for (i = 0; i < MAX_SOCKETS; i++) {
+		if (!sockmap[i]) {
+			sockmap[i] = priv;
+			return i+1;
+		}
+	}
+	return -1;
+}
+
+static inline void *get_sockmap(long sd)
+{
+	sd--;
+	if ((sd < 0) || (sd >= MAX_SOCKETS))
+		return NULL;
+	return sockmap[sd];
+}
+
+static void del_sockmap(long sd)
+{
+	sd--;
+	if ((sd < 0) || (sd >= MAX_SOCKETS))
+		return;
+	sockmap[sd] = NULL;
 }
 
 /* UTILS */
@@ -336,7 +372,7 @@ static unsigned int picotcp_poll(struct file *file, struct socket *sock, poll_ta
 
 static void picotcp_socket_event(uint16_t ev, void *s, void *priv)
 {
-	struct picotcp_sock *psk = priv;
+	struct picotcp_sock *psk = get_sockmap((long)priv);
 
 #if PICOTCP_DEBUG_EVENTS
 	picotcp_dbg("enter picotcp_socket_event(%p,%lx)\n", priv, (unsigned long)s);
@@ -623,6 +659,8 @@ static struct picotcp_sock *picotcp_sock_new(struct sock  *parent,
 											 struct mutex *stack_mutex,
 											 iprcchan_t   *stack_chan);
 
+static void picotcp_sock_del(struct picotcp_sock *psk);
+
 static int picotcp_accept(struct socket *sock, struct socket *newsock, int flags, bool kern)
 {
 	struct picotcp_sock *psk = picotcp_sock(sock);
@@ -680,6 +718,12 @@ static int picotcp_accept(struct socket *sock, struct socket *newsock, int flags
 			ret = -ENOMEM;
 			goto quit;
 		}
+		newpsk->sd = add_sockmap(newpsk);
+		if (newpsk->sd < 0) {
+			picotcp_sock_del(newpsk);
+			ret = -ENOMEM;
+			goto quit;
+		}
 		//sock_init_data(newsock, &newpsk->sk);
 		//newsock->sk = &newpsk->sk;
 		newsock->state = SS_CONNECTED;
@@ -687,7 +731,7 @@ static int picotcp_accept(struct socket *sock, struct socket *newsock, int flags
 		newpsk->sk.sk_state = TCP_ESTABLISHED;
 		newpsk->pico   = ps;
 		newpsk->in_use = 1;
-		rem_set_priv(newpsk->stack_chan, ps, newpsk);
+		rem_set_priv(newpsk->stack_chan, ps, (void*)newpsk->sd);
 		sock_graft(&newpsk->sk, newsock);
 
 		psk_full_stack_unlock(psk);
@@ -1111,15 +1155,11 @@ static int picotcp_release(struct socket *sock)
 
 	psk_full_stack_lock(psk);
 
-	rem_set_priv(psk->stack_chan, psk->pico, NULL);
-	rem_pico_socket_close(psk->stack_chan, psk->pico);
-	psk->pico   = NULL;
-	psk->in_use = 0;
+	del_sockmap(psk->sd);
+	picotcp_sock_del(psk);
+	sock_orphan(sock->sk);
 
 	psk_full_stack_unlock(psk);
-
-	mutex_destroy(&psk->events_mutex);
-	sock_orphan(sock->sk);
 
 quit:
 
@@ -1359,6 +1399,15 @@ quit:
 	return psk;
 }
 
+static void picotcp_sock_del(struct picotcp_sock *psk)
+{
+	rem_set_priv(psk->stack_chan, psk->pico, NULL);
+	rem_pico_socket_close(psk->stack_chan, psk->pico);
+	psk->pico   = NULL;
+	psk->in_use = 0;
+	mutex_destroy(&psk->events_mutex);
+}
+
 static int picotcp_create(struct net *net, struct socket *sock, int protocol, int kern)
 {
 	struct picotcp_sock    *psk= NULL;
@@ -1404,7 +1453,13 @@ static int picotcp_create(struct net *net, struct socket *sock, int protocol, in
 	}
 	sock_init_data(sock, &psk->sk);
 	psk->pico = ps;
-	rem_set_priv(stack_chan, ps, psk);
+	psk->sd = add_sockmap(psk);
+	if (psk->sd < 0) {
+		picotcp_sock_del(psk);
+		ret = -ENOMEM;
+		goto quit;
+	}
+	rem_set_priv(stack_chan, ps, (void*)psk->sd);
 	psk->in_use = 1;
 
 	ret = 0;
@@ -1449,7 +1504,7 @@ static int reopen_on_stack1(struct socket *sock)
 		return -pico_err;
 	}
 
-	rem_set_priv(psk->stack_chan, psk->pico, psk);
+	rem_set_priv(psk->stack_chan, psk->pico, (void*)psk->sd);
 
 	psk_full_stack_unlock(psk);
 

@@ -1,6 +1,17 @@
 // SPDX-FileCopyrightText: 2020 Stefan Adams <stefan.adams@vipcomag.de>
 // SPDX-License-Identifier: GPL-2.0
 
+
+/***
+ * IMPORTANT NOTICE:
+ *
+ * Since this is the bridge between the linux kernel and SEL4
+ * it must check return values from SEL4 to protect against malicious SEL4 Tasks
+ * to ensure the isolation. It has to check all returned index counters and strings.
+ * The calling layer must be able to rely on the returned values.
+ *
+ */
+
 #include "picotcp.h"
 #include "iprcchan.h"
 #include "sel4ip.h"
@@ -42,6 +53,11 @@ static void do_call(iprcchan_t *chan)
 		panic("iprc call failed!\n");
 }
 
+static inline int int_in_range(int val, int min, int max)
+{
+	return (val >= min) && (val <= max);
+}
+
 int rem_init(void (*eventfunc)(uint16_t ev, void *s, void *priv))
 {
 	chan0 = iprcchan_open(0, iprcchan_callback, eventfunc);
@@ -79,6 +95,7 @@ iprcchan_t *rem_get_chan(int nr)
 		return NULL;
 	}
 }
+
 void rem_stack_lock(iprcchan_t *chan)
 {
 	rem_arg_t *arg;
@@ -133,11 +150,22 @@ int rem_get_devices(iprcchan_t *chan, pico_devices_t *devices)
 	rem_res_t             *res = (rem_res_t*)arg;
 	rem_get_devices_res_t *r = &res->u.rem_get_devices_res;
 	int                    retval;
+	int                    i;
 
 	arg->hdr.func = f_rem_get_devices;
 	do_call(chan);
+	if (!int_in_range(r->devices.count, 0, MAX_DEVICES)) {
+		retval = -EBADSEL4REPLY;
+		goto quit;
+	}
+
+	/* avoid passing malicious device name strings to upper layers */
+	for (i = 0; i < r->devices.count; i++)
+		r->devices.names[i][sizeof(pico_dev_name_t)-1] = 0;
+
 	retval   = r->retval;
 	*devices = r->devices;
+quit:
 	iprcchan_end_call(chan);
 	return retval;
 }
@@ -154,6 +182,10 @@ int rem_get_device_config(iprcchan_t *chan, const char *name, pico_device_config
 	strncpy(a->name, name, sizeof(a->name)-1);
 	a->name[sizeof(a->name)-1] = 0;
 	do_call(chan);
+
+	/* avoid passing malicious device name strings to upper layers */
+	r->config.name[sizeof(pico_dev_name_t)-1] = 0;
+
 	retval  = r->retval;
 	*config = r->config;
 	iprcchan_end_call(chan);
@@ -231,8 +263,13 @@ int rem_get_routes(iprcchan_t *chan, pico_routes_t *routes)
 
 	arg->hdr.func = f_rem_get_routes;
 	do_call(chan);
-	retval  = r->retval;
+	if (!int_in_range(r->routes.count, 0, MAX_ROUTES)) {
+		retval = -EBADSEL4REPLY;
+		goto quit;
+	}
 	*routes = r->routes;
+	retval  = r->retval;
+quit:
 	iprcchan_end_call(chan);
 	return retval;
 }
@@ -249,10 +286,15 @@ int rem_dhcp(iprcchan_t *chan, const char *name, int *nameserver_count, union pi
 	strncpy(a->name, name, sizeof(a->name)-1);
 	a->name[sizeof(a->name)-1] = 0;
 	do_call(chan);
+	if (!int_in_range(r->nameserver_count, 0, SEL4IP_MAX_NAMESERVERS)) {
+		retval = -EBADSEL4REPLY;
+		goto quit;
+	}
 	*nameserver_count = r->nameserver_count;
 	for (i = 0; i < SEL4IP_MAX_NAMESERVERS; i++)
 		nameserver_addrs[i] = r->nameserver_addrs[i];
 	retval = r->retval;
+quit:
 	iprcchan_end_call(chan);
 	return retval;
 }
@@ -265,16 +307,19 @@ int rem_ping(iprcchan_t *chan, const union pico_address *addr, int count, sel4ip
 	rem_ping_res_t *r = &res->u.rem_ping_res;
 	int             retval, i;
 
-	if (count > SEL4IP_MAX_PING)
-		count = SEL4IP_MAX_PING;
+	if (!int_in_range(count, 1, SEL4IP_MAX_PING)) {
+		retval = -EINVAL;
+		goto quit;
+	}
 
 	arg->hdr.func = f_rem_ping;
-	a->addr = *addr;
-	a->count = count;
+	a->addr       = *addr;
+	a->count      = count;
 	do_call(chan);
 	retval = r->retval;
 	for(i = 0; i < count; i++)
 		ret[i] = r->stats[i];
+quit:
 	iprcchan_end_call(chan);
 	return retval;
 }
@@ -432,10 +477,12 @@ int rem_pico_socket_sendto(iprcchan_t *chan, rem_pico_socket_t *s, const void *b
 	rem_pico_socket_sendto_res_t *r = &res->u.rem_pico_socket_sendto_res;
 	int                           retval;
 
+	/* this is socket io, so we can truncate silently */
 	if (len > REM_BUFFSIZE)
 		len = REM_BUFFSIZE;
 	else if (len < 0)
 		len = 0;
+
 	arg->hdr.func  = f_rem_pico_socket_sendto;
 	a->s           = s;
 	a->len         = len;
@@ -457,10 +504,12 @@ int rem_pico_socket_sendto_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct ms
 	rem_pico_socket_sendto_res_t *r = &res->u.rem_pico_socket_sendto_res;
 	int                           retval;
 
+	/* this is socket io, so we can truncate silently */
 	if (len > REM_BUFFSIZE)
 		len = REM_BUFFSIZE;
 	else if (len < 0)
 		len = 0;
+
 	arg->hdr.func  = f_rem_pico_socket_sendto;
 	a->s           = s;
 	a->len         = len;
@@ -483,10 +532,12 @@ int rem_pico_socket_send(iprcchan_t *chan, rem_pico_socket_t *s, const void *buf
 	rem_pico_socket_send_res_t *r = &res->u.rem_pico_socket_send_res;
 	int                         retval;
 
+	/* this is socket io, so we can truncate silently */
 	if (len > REM_BUFFSIZE)
 		len = REM_BUFFSIZE;
 	else if (len < 0)
 		len = 0;
+
 	arg->hdr.func  = f_rem_pico_socket_send;
 	a->s           = s;
 	a->len         = len;
@@ -507,10 +558,12 @@ int rem_pico_socket_send2(iprcchan_t *chan, rem_pico_socket_t *s, const void *bu
 	rem_pico_socket_send_res_t *r = &res->u.rem_pico_socket_send_res;
 	int                         retval;
 
+	/* this is socket io, so we can truncate silently */
 	if (len > REM_BUFFSIZE)
 		len = REM_BUFFSIZE;
 	else if (len < 0)
 		len = 0;
+
 	arg->hdr.func  = f_rem_pico_socket_send;
 	a->s           = s;
 	a->len         = len;
@@ -531,10 +584,12 @@ int rem_pico_socket_send_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct msgh
 	rem_pico_socket_send_res_t *r = &res->u.rem_pico_socket_send_res;
 	int                         retval;
 
+	/* this is socket io, so we can truncate silently */
 	if (len > REM_BUFFSIZE)
 		len = REM_BUFFSIZE;
 	else if (len < 0)
 		len = 0;
+
 	arg->hdr.func  = f_rem_pico_socket_send;
 	a->s           = s;
 	a->len         = len;
@@ -556,10 +611,12 @@ int rem_pico_socket_recvfrom(iprcchan_t *chan, rem_pico_socket_t *s, void *buf, 
 	rem_pico_socket_recvfrom_res_t *r = &res->u.rem_pico_socket_recvfrom_res;
 	int                             retval;
 
+	/* this is socket io, so we can truncate silently */
 	if (len > REM_BUFFSIZE)
 		len = REM_BUFFSIZE;
 	else if (len < 0)
 		len = 0;
+
 	arg->hdr.func = f_rem_pico_socket_recvfrom;
 	a->s          = s;
 	a->len        = len;
@@ -569,8 +626,15 @@ int rem_pico_socket_recvfrom(iprcchan_t *chan, rem_pico_socket_t *s, void *buf, 
 	retval      = r->retval;
 	*orig       = r->orig;
 	*local_port = r->local_port;
-	if (retval > 0)
+	if (retval > 0) {
+		if (retval > REM_BUFFSIZE) {
+			pico_err = EBADSEL4REPLY;
+			retval   = -pico_err;
+			goto quit;
+		}
 		memcpy(buf, &r->buf[0], retval);
+	}
+quit:
 	iprcchan_end_call(chan);
 	return retval;
 }
@@ -583,10 +647,12 @@ int rem_pico_socket_recvfrom2(iprcchan_t *chan, rem_pico_socket_t *s, void *buf,
 	rem_pico_socket_recvfrom_res_t *r = &res->u.rem_pico_socket_recvfrom_res;
 	int                             retval;
 
+	/* this is socket io, so we can truncate silently */
 	if (len > REM_BUFFSIZE)
 		len = REM_BUFFSIZE;
 	else if (len < 0)
 		len = 0;
+
 	arg->hdr.func = f_rem_pico_socket_recvfrom;
 	a->s          = s;
 	a->len        = len;
@@ -597,8 +663,15 @@ int rem_pico_socket_recvfrom2(iprcchan_t *chan, rem_pico_socket_t *s, void *buf,
 	*orig       = r->orig;
 	*local_port = r->local_port;
 	*more       = r->more;
-	if (retval > 0)
+	if (retval > 0) {
+		if (retval > REM_BUFFSIZE) {
+			pico_err = EBADSEL4REPLY;
+			retval   = -pico_err;
+			goto quit;
+		}
 		memcpy(buf, &r->buf[0], retval);
+	}
+quit:
 	iprcchan_end_call(chan);
 	return retval;
 }
@@ -611,10 +684,12 @@ int rem_pico_socket_recvfrom_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct 
 	rem_pico_socket_recvfrom_res_t *r = &res->u.rem_pico_socket_recvfrom_res;
 	int                             retval;
 
+	/* this is socket io, so we can truncate silently */
 	if (len > REM_BUFFSIZE)
 		len = REM_BUFFSIZE;
 	else if (len < 0)
 		len = 0;
+
 	arg->hdr.func = f_rem_pico_socket_recvfrom;
 	a->s          = s;
 	a->len        = len;
@@ -624,8 +699,14 @@ int rem_pico_socket_recvfrom_msg(iprcchan_t *chan, rem_pico_socket_t *s, struct 
 	*orig       = r->orig;
 	*local_port = r->local_port;
 	if (retval > 0) {
+		if (retval > REM_BUFFSIZE) {
+			pico_err = EBADSEL4REPLY;
+			retval   = -pico_err;
+			goto quit;
+		}
 		memcpy_to_msg(msg, &r->buf[0], retval);
 	}
+quit:
 	iprcchan_end_call(chan);
 	return retval;
 }
@@ -641,8 +722,8 @@ int rem_pico_socket_udp_poll(iprcchan_t *chan, rem_pico_socket_t *s)
 	arg->hdr.func = f_rem_pico_socket_udp_poll;
 	a->s          = s;
 	do_call(chan);
-	pico_err    = res->hdr.pico_err;
-	retval      = r->retval;
+	pico_err = res->hdr.pico_err;
+	retval   = r->retval;
 	iprcchan_end_call(chan);
 	return retval;
 }
@@ -658,8 +739,8 @@ int rem_pico_socket_tcp_poll(iprcchan_t *chan, rem_pico_socket_t *s)
 	arg->hdr.func = f_rem_pico_socket_tcp_poll;
 	a->s          = s;
 	do_call(chan);
-	pico_err    = res->hdr.pico_err;
-	retval      = r->retval;
+	pico_err = res->hdr.pico_err;
+	retval   = r->retval;
 	iprcchan_end_call(chan);
 	return retval;
 }
@@ -690,10 +771,13 @@ int rem_pico_socket_getoption(iprcchan_t *chan, rem_pico_socket_t *s, int option
 	rem_pico_socket_getoption_res_t *r = &res->u.rem_pico_socket_getoption_res;
 	int                              retval;
 
-	if (*optlen > REM_BUFFSIZE)
-		*optlen = REM_BUFFSIZE;
-	else if (*optlen < 0)
-		*optlen = 0;
+	if (!int_in_range(*optlen, 0, REM_BUFFSIZE)) {
+		printk(KERN_ERR"optlen too big\n");
+		pico_err = EINVAL;
+		retval = -pico_err;
+		goto quit;
+	}
+
 	arg->hdr.func = f_rem_pico_socket_getoption;
 	a->s      = s;
 	a->option = option;
@@ -701,9 +785,16 @@ int rem_pico_socket_getoption(iprcchan_t *chan, rem_pico_socket_t *s, int option
 	do_call(chan);
 	pico_err = res->hdr.pico_err;
 	retval   = r->retval;
-	*optlen  = r->optlen;
-	if (retval > 0)
+	if (retval > 0) {
+		if (r->optlen > *optlen) {
+			pico_err = EBADSEL4REPLY;
+			retval   = -pico_err;
+			goto quit;
+		}
+		*optlen = r->optlen;
 		memcpy(value, &r->value[0], *optlen);
+	}
+quit:
 	iprcchan_end_call(chan);
 	return retval;
 }
@@ -716,18 +807,21 @@ int rem_pico_socket_setoption(iprcchan_t *chan, rem_pico_socket_t *s, int option
 	rem_pico_socket_setoption_res_t *r = &res->u.rem_pico_socket_setoption_res;
 	int                              retval;
 
-	if (optlen > REM_BUFFSIZE)
-		optlen = REM_BUFFSIZE;
-	else if (optlen < 0)
-		optlen = 0;
+	if (!int_in_range(optlen, 0, REM_BUFFSIZE)) {
+		pico_err = EINVAL;
+		retval = -pico_err;
+		goto quit;
+	}
+
 	arg->hdr.func = f_rem_pico_socket_setoption;
-	a->s      = s;
-	a->option = option;
-	a->optlen = optlen;
+	a->s          = s;
+	a->option     = option;
+	a->optlen     = optlen;
 	memcpy(&a->value[0], value, optlen);
 	do_call(chan);
 	pico_err = res->hdr.pico_err;
 	retval   = r->retval;
+quit:
 	iprcchan_end_call(chan);
 	return retval;
 }

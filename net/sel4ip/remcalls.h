@@ -10,6 +10,8 @@
 
 #define ETH_MAC_LEN 6
 
+#define EBADSEL4REPLY	EFAULT // error code for corrupted reply from sel4 task
+
 typedef struct rem_pico_socket rem_pico_socket_t;
 
 extern int rem_init(void (*eventfunc)(uint16_t ev, void *s, void *priv));
