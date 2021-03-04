@@ -23,6 +23,11 @@
 #define picotcp_dbg(...) /*as nothing*/
 #endif
 
+#define SOCKSIZE  	16
+#define SOCKSIZE6 	28
+
+typedef int socklen_t;
+
 #define MAX_SOCKETS 1024
 
 #define SOCK_OPEN                   0

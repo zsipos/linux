@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <linux/of.h>
-#include <linux/types.h>
-#include <linux/socket.h>
 
 extern int af_inet_picotcp_init(void);
 extern int ip_route_proc_init(void);

@@ -1,3 +1,5 @@
+#include <linux/seq_file.h>
+#include <net/protocol.h>
 #include <linux/proc_fs.h>
 
 #include "picotcp.h"

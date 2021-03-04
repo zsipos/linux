@@ -12,6 +12,8 @@
  *
  */
 
+#include <linux/skbuff.h>
+
 #include "picotcp.h"
 #include "iprcchan.h"
 #include "sel4ip.h"

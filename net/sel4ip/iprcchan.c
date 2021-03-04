@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: GPL-2.0
 
 #include <linux/interrupt.h>
-#include <linux/types.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/of_irq.h>
